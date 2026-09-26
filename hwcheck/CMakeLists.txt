@@ -24,7 +24,8 @@ pico_sdk_init()
 
 # Per-function stack usage plus the call graph (GCC writes a .ci file next to
 # each object); tools/stackcheck.py combines them into a worst-case path.
-add_compile_options(-fcallgraph-info=su)
+# -fstack-usage also writes the plain per-function .su files for reference.
+add_compile_options(-fcallgraph-info=su -fstack-usage)
 
 add_subdirectory(${WILIBSP_DIR}/bsp wilibsp/bsp)
 add_subdirectory(${WILIBSP_DIR}/libs/onewili wilibsp/onewili)
