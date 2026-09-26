@@ -164,11 +164,28 @@ foreach(_app IN LISTS FW2_EMU_UPSTREAM_APPS)
     add_subdirectory("${WILIBSP_DIR}/apps/${_app}" "${CMAKE_BINARY_DIR}/wilibsp/${_app}")
 endforeach()
 
-file(GLOB _local_apps LIST_DIRECTORIES true "${CMAKE_CURRENT_SOURCE_DIR}/apps/*")
-foreach(_dir IN LISTS _local_apps)
-    if(IS_DIRECTORY "${_dir}" AND EXISTS "${_dir}/CMakeLists.txt")
-        add_subdirectory("${_dir}")
+option(FW2_EMU_LOCAL_APPS "Build every app in apps/" ON)
+if(FW2_EMU_LOCAL_APPS)
+    file(GLOB _local_apps LIST_DIRECTORIES true "${CMAKE_CURRENT_SOURCE_DIR}/apps/*")
+    foreach(_dir IN LISTS _local_apps)
+        if(IS_DIRECTORY "${_dir}" AND EXISTS "${_dir}/CMakeLists.txt")
+            add_subdirectory("${_dir}")
+        endif()
+    endforeach()
+endif()
+
+# App folders anywhere on disk (tools/fw2emu run / web use this with the two
+# lists above emptied, so only the requested app is configured).
+set(FW2_EMU_EXTRA_APPS "" CACHE STRING "Extra app folders to build (absolute paths, ;-separated)")
+foreach(_dir IN LISTS FW2_EMU_EXTRA_APPS)
+    get_filename_component(_dir "${_dir}" ABSOLUTE)
+    if(NOT EXISTS "${_dir}/CMakeLists.txt")
+        message(FATAL_ERROR "FW2_EMU_EXTRA_APPS: ${_dir} has no CMakeLists.txt")
     endif()
+    string(MD5 _hash "${_dir}")
+    string(SUBSTRING "${_hash}" 0 8 _hash)
+    get_filename_component(_name "${_dir}" NAME)
+    add_subdirectory("${_dir}" "${CMAKE_BINARY_DIR}/extra/${_name}-${_hash}")
 endforeach()
 
 # ------------------------------------------------------------------ web page

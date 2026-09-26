@@ -1,0 +1,12 @@
+{
+  "name": "freewili2-emu",
+  "build": { "dockerfile": "Dockerfile" },
+  "remoteUser": "vscode",
+  "postCreateCommand": "git submodule update --init --depth 1 && git -C third_party/wilibsp submodule update --init --depth 1 libs/onewili",
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-vscode.cmake-tools", "ms-vscode.cpptools", "ms-python.python"],
+      "settings": { "cmake.configureOnOpen": false }
+    }
+  }
+}

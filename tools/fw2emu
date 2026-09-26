@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
 """fw2emu — helper for freewili2-emu.
 
-  fw2emu hwcheck [APP_DIR ...]   build apps for the real FREE-WILi 2 (Pico SDK +
-                                 Arm GCC) and report memory use and worst-case stack
+  fw2emu run APP_DIR [EMULATOR FLAGS]   build one app folder for the emulator and run it
+  fw2emu web APP_DIR [EMULATOR FLAGS]   build it for the browser and serve it on 127.0.0.1
+  fw2emu hwcheck [APP_DIR ...]          build apps for the real FREE-WILi 2 (Pico SDK +
+                                        Arm GCC) and report memory use and worst-case stack
 
 Run `fw2emu COMMAND --help` for the options of each command.
 """
 
 import argparse
+import functools
+import http.server
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import urllib.parse
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(TOOLS)
@@ -23,7 +28,7 @@ import stackcheck  # noqa: E402
 WILIBSP = os.path.join(ROOT, "third_party", "wilibsp")
 PICO_SDK_VERSION = "2.3.0"          # what WiliBSP pins (tools/fw.py)
 PICO_TOOLCHAIN_VERSION = "14_2_Rel1"
-CACHE = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "fw2emu")
+CACHE = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "fw2emu")
 
 KB = 1024
 # RP2350 memory map (Pico SDK 2.3.0 rp2350 default_locations.ld) and the
@@ -290,6 +295,101 @@ def check_elf(elf_path, build_dir):
     return dict(elf=elf_path, status=status, messages=msgs, memory=mem, stack=st, stack_budget=budget)
 
 
+# --------------------------------------------------------------------- run / web
+
+
+def _generator():
+    return ["-G", "Ninja"] if shutil.which("ninja") else []
+
+
+def build_one_app(app_dir, build, cmake_args, web=False):
+    """Configure the emulator with only APP_DIR and build its target. Returns (target, bin dir)."""
+    app_dir, targets = check_app_dir(app_dir)
+    target = targets[0]
+    if len(targets) > 1:
+        print(f"fw2emu: {app_dir} defines {', '.join(targets)}; using {target}", file=sys.stderr)
+    if not os.path.isfile(os.path.join(WILIBSP, "bsp", "fw2.h")):
+        die("WiliBSP is missing; run: git submodule update --init")
+    cfg = ["cmake", "-S", ROOT, "-B", build] + _generator() + [
+        "-DFW2_EMU_UPSTREAM_APPS=", "-DFW2_EMU_LOCAL_APPS=OFF",
+        f"-DFW2_EMU_EXTRA_APPS={app_dir}"] + cmake_args
+    if web:
+        cfg = ["emcmake"] + cfg
+    if run(cfg, stdout=subprocess.DEVNULL).returncode:
+        die("configure failed (run the command above yourself to see why)", 1)
+    if run(["cmake", "--build", build, "--target", target]).returncode:
+        die("build failed", 1)
+    return target, os.path.join(build, "bin")
+
+
+def cmd_run(a):
+    cmake_args, suffix = [], ""
+    if a.sanitize:
+        cmake_args.append("-DFW2_EMU_SANITIZE=ON"); suffix += "-asan"
+    if a.m32:
+        cmake_args.append("-DFW2_EMU_32BIT=ON"); suffix += "-m32"
+    if a.debug or a.gdb:
+        cmake_args.append("-DCMAKE_BUILD_TYPE=Debug"); suffix += "-debug"
+    build = os.path.abspath(a.build_dir or os.path.join(ROOT, "build-run" + suffix))
+    target, bindir = build_one_app(a.app, build, cmake_args)
+    exe = os.path.join(bindir, target)
+    args = a.emu_args[1:] if a.emu_args[:1] == ["--"] else a.emu_args
+    if a.m32 and "--headless" not in args:
+        print("fw2emu: note: the -m32 build has no window unless configured with SDL; adding --headless",
+              file=sys.stderr)
+        args = ["--headless"] + args
+    if (sys.platform.startswith("linux") and "--headless" not in args
+            and not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY")):
+        print("fw2emu: note: no display here (e.g. a Codespace), so running --headless. Drive it with "
+              "--script / --rtt and save the screen with --shot-on-exit, or use `tools/fw2emu web APP_DIR`.",
+              file=sys.stderr)
+        args = ["--headless"] + args
+    cmd = ["gdb", "-q", "-ex", "break fw2_emu_app_main", "--args", exe] + args if a.gdb else [exe] + args
+    if a.gdb and not shutil.which("gdb"):
+        die("gdb not found")
+    print("+ " + " ".join(cmd), file=sys.stderr, flush=True)
+    os.execvp(cmd[0], cmd)
+
+
+class _Handler(http.server.SimpleHTTPRequestHandler):
+    extensions_map = dict(http.server.SimpleHTTPRequestHandler.extensions_map,
+                          **{".wasm": "application/wasm", ".js": "text/javascript"})
+
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
+
+def cmd_web(a):
+    if not shutil.which("emcc") or not shutil.which("emcmake"):
+        die("emcc not found. Install and activate Emscripten (the project uses 4.0.15):\n"
+            "  git clone https://github.com/emscripten-core/emsdk.git ~/emsdk\n"
+            "  ~/emsdk/emsdk install 4.0.15 && ~/emsdk/emsdk activate 4.0.15\n"
+            "  source ~/emsdk/emsdk_env.sh\n"
+            "or build the Docker image instead (see README).")
+    build = os.path.abspath(a.build_dir or os.path.join(ROOT, "build-web-run"))
+    target, bindir = build_one_app(a.app, build, ["-DCMAKE_BUILD_TYPE=Release"], web=True)
+    args = a.emu_args[1:] if a.emu_args[:1] == ["--"] else a.emu_args
+    query = {"app": target}
+    if args:
+        query["args"] = " ".join(args)
+    url = f"http://127.0.0.1:{a.port}/?{urllib.parse.urlencode(query, quote_via=urllib.parse.quote)}"
+    if a.no_serve:
+        print(f"built {os.path.join(bindir, target)}.js; serve {bindir} and open {url}")
+        return 0
+    handler = functools.partial(_Handler, directory=bindir)
+    try:
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", a.port), handler)
+    except OSError as e:
+        die(f"cannot listen on 127.0.0.1:{a.port}: {e} (try --port)")
+    print(f"\nServing {bindir}\nOpen {url}\nCtrl-C to stop.", flush=True)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
 # --------------------------------------------------------------------- hwcheck
 
 
@@ -339,20 +439,30 @@ def cmd_hwcheck(a):
     if p.returncode and not a.json:
         print(f"fw2emu: build reported errors (full log: {log_path})", file=sys.stderr)
 
+    failed = ninja_failures(build_log) if p.returncode else {}
     results = []
     for d, targets in dirs:
         base = os.path.basename(d)
+        mine = [ln for cmd, lines in failed.items() if f"apps/{base}/" in cmd for ln in lines]
+        shared = [ln for cmd, lines in failed.items() if "apps/" not in cmd for ln in lines]
         for t in targets:
             elf = os.path.join(build, "apps", base, t + ".elf")
             r = dict(app=t, dir=d)
-            if p.returncode or not os.path.exists(elf):
-                errs = [ln for ln in build_log.splitlines()
-                        if ("error" in ln.lower() or "overflow" in ln.lower()) and (t in ln or base in ln or "region" in ln)]
-                if p.returncode and (errs or not os.path.exists(elf)):
-                    r.update(status="error", messages=["build failed"] + errs[:8])
+            why = mine or shared
+            if why or not os.path.exists(elf):
+                key = [ln for ln in why if re.search(r"error:|Error:|overflow", ln)
+                       and not ln.lstrip().startswith("raise ")] or why
+                msgs = ["build failed (log: " + log_path + ")"] + [ln.strip() for ln in key[:8]]
+                if not os.path.exists(elf):
+                    r.update(status="error", messages=msgs)
                     results.append(r)
                     continue
-            r.update(check_elf(elf, build))
+                # Linked, but a post-link check (WiliBSP's check_app_uf2.py) failed: still report sizes.
+                r.update(check_elf(elf, build))
+                r["status"] = "error"
+                r["messages"] = msgs + r["messages"]
+            else:
+                r.update(check_elf(elf, build))
             results.append(r)
 
     meta = dict(pico_sdk=sdk_version(sdk), pico_sdk_path=sdk, gcc=gcc_version(bindir),
@@ -366,6 +476,20 @@ def cmd_hwcheck(a):
         with open(a.output, "w") as f:
             json.dump(dict(tool=meta, apps=results), f, indent=2, default=str)
     return 1 if any(r["status"] == "error" for r in results) else 0
+
+
+def ninja_failures(log):
+    """{FAILED line: [output lines]} from a ninja log."""
+    out, cur = {}, None
+    for ln in log.splitlines():
+        if ln.startswith("FAILED: "):
+            cur = ln
+            out[cur] = []
+        elif re.match(r"^\[\d+/\d+\] ", ln) or ln.startswith("ninja: "):
+            cur = None
+        elif cur:
+            out[cur].append(ln)
+    return out
 
 
 def _pct(n, d):
@@ -449,6 +573,29 @@ def main():
     ap = argparse.ArgumentParser(prog="fw2emu", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
+
+    r = sub.add_parser("run", help="build one app folder for the emulator and run it",
+                       description="Build APP_DIR (any folder with a fw2_display_app() CMakeLists.txt) "
+                                   "against the emulator and run it. Everything after APP_DIR goes to the "
+                                   "emulator (e.g. --headless --script FILE --rtt).")
+    r.add_argument("app", metavar="APP_DIR")
+    r.add_argument("emu_args", nargs=argparse.REMAINDER, metavar="EMULATOR FLAGS")
+    r.add_argument("--build-dir", help="default: build-run/ (build-run-asan/ etc. with the options below)")
+    r.add_argument("--sanitize", action="store_true", help="ASan + UBSan build (FW2_EMU_SANITIZE)")
+    r.add_argument("--m32", action="store_true", help="32-bit build (FW2_EMU_32BIT), headless")
+    r.add_argument("--debug", action="store_true", help="CMAKE_BUILD_TYPE=Debug")
+    r.add_argument("--gdb", action="store_true", help="Debug build, run under gdb, break in the app's main")
+    r.set_defaults(func=cmd_run)
+
+    w = sub.add_parser("web", help="build one app folder for the browser and serve it locally",
+                       description="Build APP_DIR with Emscripten (emcc must be on PATH) and serve the page "
+                                   "on 127.0.0.1. Flags after APP_DIR are passed to the emulator (?args=).")
+    w.add_argument("app", metavar="APP_DIR")
+    w.add_argument("emu_args", nargs=argparse.REMAINDER, metavar="EMULATOR FLAGS")
+    w.add_argument("--build-dir", help="default: build-web-run/")
+    w.add_argument("--port", type=int, default=8080, help="default: 8080")
+    w.add_argument("--no-serve", action="store_true", help="build only")
+    w.set_defaults(func=cmd_web)
 
     h = sub.add_parser("hwcheck", help="build for real hardware and check memory and stack",
                        description="Build apps for the real FREE-WILi 2 with the Pico SDK and Arm GCC and "
