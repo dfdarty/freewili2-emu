@@ -135,6 +135,15 @@ These parts are modelled only approximately:
 Treat the emulator as the place to get logic, UI and data flow right. Then
 verify drivers, timing and anything radio-related on real hardware.
 
+## Reporting bugs
+
+This is an unofficial project, not affiliated with FREE-WILi LLC. If an app
+behaves differently in the emulator than on a real FREE-WILi 2, or the
+emulator itself misbehaves, please
+[open an issue here](https://github.com/dfdarty/freewili2-emu/issues) —
+**not** with FREE-WILi or WiliBSP. Only report to them once you have
+reproduced the problem on real hardware.
+
 ## Layout
 
 ```
