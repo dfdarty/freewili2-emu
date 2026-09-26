@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #ifndef FW2EMU_HEADLESS_ONLY
 #include <SDL.h>
@@ -82,7 +83,6 @@ static struct {
     int16_t *pcm;
     size_t   n;
     uint32_t rate;
-    double   pos;
 } MIC;
 
 static bool wav_load(const char *path) {
@@ -135,25 +135,33 @@ void emu_audio_set_mic_wav(const char *path) {
 static float s_mic_level = 1.0f;
 void emu_audio_set_mic_level(float g) { s_mic_level = g; }
 
-/* next external mic sample (int16 range) at rate fs */
-static float mic_next(double fs) {
-    float v = 0.0f;
-    if (MIC.n) {
-        size_t i = (size_t)MIC.pos;
-        v = MIC.pcm[i % MIC.n] * s_mic_level;
-        MIC.pos += (double)MIC.rate / fs;
-        if (MIC.pos >= (double)MIC.n) MIC.pos -= (double)MIC.n;
+/* A synthetic tone in the room ("set tone HZ AMP", AMP in int16 units; 0 = off). */
+static double s_tone_hz;
+static float  s_tone_amp;
+bool emu_audio_set(const char *name, int n, const float *v) {
+    if (!strcasecmp(name, "tone") && n >= 1) {
+        s_tone_hz = v[0];
+        s_tone_amp = n >= 2 ? v[1] : 8000.0f;
+        if (s_tone_hz <= 0) s_tone_amp = 0;
+        return true;
     }
-    return v;
+    if (!strcasecmp(name, "miclevel") && n >= 1) { s_mic_level = v[0]; return true; }
+    return false;
 }
 
-/* Shared with the PDM microphone model: the acoustic scene at the device. */
-float emu_audio_scene_sample(double fs, float speaker_bleed) {
-    static uint32_t rng = 12345u;
-    rng = rng * 1664525u + 1013904223u;
-    float noise = ((float)(rng >> 16) / 65536.0f - 0.5f) * 16.0f;    /* ~-66 dBFS floor */
-    return mic_next(fs) + speaker_bleed + noise;
+/* The acoustic scene at the device at time t (seconds): the --mic-wav
+ * source (looped) plus speaker bleed and a noise floor. Time-based, so the
+ * codec ADC and the PDM mic array hear the same sound. */
+float emu_audio_scene_at(double t, float speaker_bleed, uint32_t *rng) {
+    float v = 0.0f;
+    if (MIC.n) v = MIC.pcm[(size_t)(t * (double)MIC.rate) % MIC.n] * s_mic_level;
+    if (s_tone_amp) v += s_tone_amp * (float)sin(2.0 * M_PI * s_tone_hz * fmod(t, 1000.0));
+    *rng = *rng * 1664525u + 1013904223u;
+    float noise = ((float)(*rng >> 16) / 65536.0f - 0.5f) * 16.0f;   /* ~-66 dBFS floor */
+    return v + speaker_bleed + noise;
 }
+
+float emu_audio_speaker_now(void);
 
 /* ------------------------------------------------------------ host output */
 static struct {
@@ -281,7 +289,7 @@ static double i2s_fs(void) {
     return (double)clock_get_hz(clk_sys) / div / 128.0;
 }
 
-static void i2s_frame(double fs, float spk, float hp, int rate) {
+static void i2s_frame(double t, float spk, float hp, int rate) {
     bool autopush = (I.pio->sm[I.sm].shiftctrl & PIO_SM0_SHIFTCTRL_AUTOPUSH_BITS) != 0;
     unsigned dreq_tx = pio_get_dreq(I.pio, I.sm, true), dreq_rx = pio_get_dreq(I.pio, I.sm, false);
 
@@ -319,7 +327,8 @@ static void i2s_frame(double fs, float spk, float hp, int rate) {
 
     if (autopush) {
         float adc = 0.0f;
-        if (C.reg[0x02] & 0x01) adc = emu_audio_scene_sample(fs, s_spk * 0.2f);   /* ADC enabled */
+        static uint32_t rng = 12345u;
+        if (C.reg[0x02] & 0x01) adc = emu_audio_scene_at(t, s_spk * 0.2f, &rng);   /* ADC enabled */
         if (adc > 32767.0f) adc = 32767.0f;
         if (adc < -32768.0f) adc = -32768.0f;
         uint32_t word = (uint16_t)(int16_t)lroundf(adc);                       /* right slot */
@@ -344,10 +353,14 @@ void emu_audio_task(void) {
     float spk, hp;
     codec_route(&spk, &hp);
     int rate = (int)lround(fs);
-    for (uint64_t i = 0; i < n; i++) i2s_frame(fs, spk, hp, rate);
+    for (uint64_t i = 0; i < n; i++)
+        i2s_frame((double)I.anchor_us / 1e6 + (double)(I.done + i) / fs, spk, hp, rate);
     I.done = due;
     host_flush(rate);
 }
+
+/* Speaker output right now (int16 units), for the PDM mics' acoustic bleed. */
+float emu_audio_speaker_now(void) { return I.last_spk; }
 
 /* status for the skin: which outputs are audibly playing — 0 none, bit0 speaker,
  * bit1 headphone jack; level 0..1 */

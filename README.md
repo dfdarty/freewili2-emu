@@ -23,7 +23,10 @@ wire protocols the real parts use:
 | ST7796 LCD on SPI1 | `dev_lcd.c` | Command/data decode (CASET, RASET, RAMWR, SLPOUT, DISPON…), RGB565, backlight GPIO, power zone 2 |
 | FT6336U touch on I2C1 | `dev_touch.c` | Register file, point latches, chip-to-screen orientation. Taps are held until the app has read them |
 | WS2812 × 16 on pio1 | `dev_leds.c` | GRB words from the state machine, latch timing, power zone 10 |
-| PCAL6524 IO expander | `dev_ioexp.c` | Output ports: VREF select, antenna switch, mic/IR/USB power |
+| PCAL6524 IO expander | `dev_ioexp.c` | Output ports and direction: VREF select, antenna switch, mic/IR/USB power |
+| SHT40, OPT4001, BMI323, BMM350 on I2C1 | `dev_sensors.c` | Command/register protocols the Bosch and TI drivers expect; values set from the command line, a script or the web page (temperature, humidity, lux, tilt, heading); power zone 1 |
+| NAU88C10 codec on I2C1 + I2S on pio0 | `dev_audio.c` | Register file with reset defaults; DAC mute/volume, speaker vs. jack routing and gain; ADC hears the room. The I2S program model runs at `clk_sys / clkdiv / 128` (16 009 Hz at 250 MHz) through DREQ-paced DMA, and plays through the PC or into a WAV |
+| 4 × PDM MEMS mics on pio1 | `dev_pdm.c` | Shared 1.024 MHz clock, two data lines × two clock phases, bit-packed exactly like the `pdm_capture` program; one sigma-delta modulator per mic; free-running ring DMA. Silent unless MIC_PWR (IO expander P1.7) is on |
 | Board-manager PIC on UART1 | `dev_pic.c` | The 62500-baud link, byte for byte. 23-byte status frames (14 buttons, charger, rails); break → `0xC9` → 11-byte power command; ~1 s rail walk |
 | SEGGER RTT | `rtt.c` | DIAG to stdout; optional TCP on :9090 / :9091, the same ports `fw rtt` uses |
 | PSRAM | `sdk_periph.c` | 8 MB mapped at the real address, `0x11000000` |
@@ -97,7 +100,12 @@ serve `build-web/bin/`.
 --rtt               serve RTT on 127.0.0.1:9090 (DIAG) and :9091 (agentio)
 --rails HEX         power zones already on at launch (default 0x8183)
 --scale N           window scale
--v                  log model activity (power commands, touches, IO expander)
+--sensor NAME=V     set a sensor or the room sound: temp=24 lux=320 tilt=30,0
+                    tone=1000,8000 mics=1,1,0,1 (see docs/scripting.md)
+--audio-out WAV     record everything the codec plays
+--mic-wav WAV       sound reaching the microphones (looped)
+--mute              don't play audio through the PC
+-v, -vv             log model activity (power commands, touches, IO expander, audio)
 ```
 
 In the browser, pass the same flags as `?app=hello_display&args=-v`.
@@ -112,14 +120,17 @@ WiliBSP (`fw2_display_app(...)`). It builds for the emulator as-is. See
 
 These features are absent from the emulator entirely:
 - **DVI:** stubbed.
-- **Audio and microphones:** codec, PDM mics, speaker.
-- **Sensors:** IMU, magnetometer, SHT40, light.
 - **Radios:** CC1101, LoRa, NFC, IR.
 - **USB host.**
 - **The MAIN CPU / OneWili link.**
 
 These parts are modelled only approximately:
-- **Timing:** there is no bus or PIO timing, and DMA transfers complete instantly.
+- **Timing:** there is no bus timing. SPI and memory DMA complete instantly;
+  PIO streams (I2S, PDM) are paced by their DREQs at the real sample rates.
+- **Acoustics:** every mic hears the same scene (a WAV, a test tone, speaker
+  bleed, a noise floor) scaled by a per-mic gain. There are no propagation
+  delays between capsules, so beamforming can be exercised but not measured.
+- **Sensors:** values are what you set, plus optional noise; there is no motion model.
 
 Treat the emulator as the place to get logic, UI and data flow right. Then
 verify drivers, timing and anything radio-related on real hardware.

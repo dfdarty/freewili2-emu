@@ -77,6 +77,10 @@
       <div class="sl" id="sensors"></div>
     </div>
     <div class="card">
+      <h2>Sound in the room</h2>
+      <div class="sl" id="sound"></div>
+    </div>
+    <div class="card">
       <h2>RTT diagnostics</h2>
       <pre id="log"></pre>
     </div>
@@ -179,6 +183,33 @@
   nb.addEventListener('change', () => send(`set noise ${nb.checked ? 1 : 0}`));
   box.append(nl, nb, document.createElement('span'));
   apply('heading');
+
+  // ---- room sound: a test tone and per-mic pickup (mics listed left to right)
+  const R = { hz: 1000, amp: 0, D: 1, B: 1, A: 1, C: 1 };
+  const sbox = document.getElementById('sound');
+  const soundDefs = [
+    ['hz', 'Tone Hz', 1.7, 3.9, 0.01, v => Math.round(10 ** v).toString(), v => Math.log10(v)],
+    ['amp', 'Tone level', 0, 16000, 100, v => v ? v.toFixed(0) : 'off'],
+    ['D', 'Mic D (left)', 0, 1, 0.05, v => v.toFixed(2)],
+    ['B', 'Mic B', 0, 1, 0.05, v => v.toFixed(2)],
+    ['A', 'Mic A', 0, 1, 0.05, v => v.toFixed(2)],
+    ['C', 'Mic C (right)', 0, 1, 0.05, v => v.toFixed(2)],
+  ];
+  for (const [key, name, min, max, step, fmt, toSlider] of soundDefs) {
+    const id = `r_${key}`;
+    const lab = document.createElement('label'); lab.htmlFor = id; lab.textContent = name;
+    const inp = Object.assign(document.createElement('input'), { type: 'range', id, min, max, step });
+    inp.value = toSlider ? toSlider(R[key]) : R[key];
+    const out = document.createElement('output'); out.textContent = fmt(Number(inp.value));
+    inp.addEventListener('input', () => {
+      const v = Number(inp.value);
+      R[key] = key === 'hz' ? Math.round(10 ** v) : v;
+      out.textContent = fmt(v);
+      if (key === 'hz' || key === 'amp') send(`set tone ${R.hz} ${R.amp}`);
+      else send(`set mic.${key} ${R[key]}`);
+    });
+    sbox.append(lab, inp, out);
+  }
 
   const s = document.createElement('script');
   s.src = `${current.name}.js`;

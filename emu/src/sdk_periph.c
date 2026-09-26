@@ -281,7 +281,7 @@ void emu_irq_raise(unsigned n) {
  * CHAIN_TO channel and raises DMA_IRQ_0/1 — the behaviour the WiliBSP audio
  * ping-pong and ring-loop code relies on. */
 typedef struct {
-    dma_channel_hw_t   hw;
+    dma_channel_hw_t  *hw;           /* -> emu_dma_hw.ch[n] */
     dma_channel_config cfg;
     uint32_t reload;                 /* TRANS_COUNT reload value */
     bool claimed, irq0_en, irq1_en, irq0_st, irq1_st, busy;
@@ -292,7 +292,12 @@ typedef struct {
 static dma_ch_t s_dma[NUM_DMA_CHANNELS];
 dma_hw_t emu_dma_hw;
 
-dma_channel_hw_t *dma_channel_hw_addr(uint ch) { return &s_dma[ch].hw; }
+__attribute__((constructor)) static void dma_boot(void) {
+    for (int i = 0; i < NUM_DMA_CHANNELS; i++) s_dma[i].hw = &emu_dma_hw.ch[i];
+}
+
+dma_channel_hw_t *dma_channel_hw_addr(uint ch) { emu_poll(); return s_dma[ch].hw; }
+dma_hw_t *emu_dma_hw_access(void) { emu_poll(); return &emu_dma_hw; }
 
 dma_channel_config dma_channel_get_default_config(uint ch) {
     dma_channel_config c = { .size = DMA_SIZE_32, .read_inc = true, .write_inc = false,
@@ -334,7 +339,7 @@ static void dma_complete(uint ch) {
     dma_ch_t *c = &s_dma[ch];
     c->busy = false;
     c->rx_armed = false;
-    c->hw.transfer_count = 0;
+    c->hw->transfer_count = 0;
     bool fire0 = false, fire1 = false;
     if (!c->cfg.irq_quiet) {
         if (c->irq0_en) { c->irq0_st = true; fire0 = true; }
@@ -363,12 +368,12 @@ static int uart_of(uintptr_t a) {
 static void dma_start(uint ch) {
     dma_ch_t *c = &s_dma[ch];
     if (!c->cfg.enable) return;
-    c->hw.transfer_count = c->reload;
+    c->hw->transfer_count = c->reload;
     uint32_t n = c->reload;
-    int spi = spi_of(c->hw.write_addr);
+    int spi = spi_of(c->hw->write_addr);
     if (spi >= 0) {
         uint8_t chunk[512];
-        uintptr_t rd = c->hw.read_addr;
+        uintptr_t rd = c->hw->read_addr;
         while (n) {
             uint32_t k = n < sizeof chunk ? n : (uint32_t)sizeof chunk;
             for (uint32_t i = 0; i < k; i++) {
@@ -378,11 +383,11 @@ static void dma_start(uint ch) {
             emu_spi_bus_write((unsigned)spi, chunk, k);
             n -= k;
         }
-        c->hw.read_addr = rd;
+        c->hw->read_addr = rd;
         dma_complete(ch);
         return;
     }
-    if (uart_of(c->hw.read_addr) >= 0) {       /* UART RX -> ring */
+    if (uart_of(c->hw->read_addr) >= 0) {       /* UART RX -> ring */
         c->rx_armed = true;
         c->rx_endless = false;
         c->rx_left = n;
@@ -395,15 +400,15 @@ static void dma_start(uint ch) {
         return;
     }
     /* memory -> memory */
-    uintptr_t rd = c->hw.read_addr, wr = c->hw.write_addr;
+    uintptr_t rd = c->hw->read_addr, wr = c->hw->write_addr;
     unsigned e = elem(c);
     for (uint32_t i = 0; i < n; i++) {
         memcpy((void *)wr, (const void *)rd, e);
         if (c->cfg.read_inc) rd = ring_step(rd, e, c->cfg.ring_write ? 0 : c->cfg.ring_bits);
         if (c->cfg.write_inc) wr = ring_step(wr, e, c->cfg.ring_write ? c->cfg.ring_bits : 0);
     }
-    c->hw.read_addr = rd;
-    c->hw.write_addr = wr;
+    c->hw->read_addr = rd;
+    c->hw->write_addr = wr;
     dma_complete(ch);
 }
 
@@ -417,14 +422,14 @@ size_t emu_dma_dreq_pull(unsigned dreq, uint32_t *out, size_t max) {
             if (s_dma[ch].busy && s_dma[ch].cfg.dreq == dreq) { c = &s_dma[ch]; break; }
         if (!c) break;
         unsigned e = elem(c);
-        while (got < max && c->hw.transfer_count) {
+        while (got < max && c->hw->transfer_count) {
             uint32_t v = 0;
-            memcpy(&v, (const void *)c->hw.read_addr, e);
+            memcpy(&v, (const void *)c->hw->read_addr, e);
             out[got++] = v;
-            if (c->cfg.read_inc) c->hw.read_addr = ring_step(c->hw.read_addr, e, c->cfg.ring_write ? 0 : c->cfg.ring_bits);
-            c->hw.transfer_count--;
+            if (c->cfg.read_inc) c->hw->read_addr = ring_step(c->hw->read_addr, e, c->cfg.ring_write ? 0 : c->cfg.ring_bits);
+            c->hw->transfer_count--;
         }
-        if (!c->hw.transfer_count) dma_complete(ch);
+        if (!c->hw->transfer_count) dma_complete(ch);
     }
     return got;
 }
@@ -438,12 +443,12 @@ size_t emu_dma_dreq_push(unsigned dreq, const uint32_t *in, size_t n) {
             if (s_dma[ch].busy && s_dma[ch].cfg.dreq == dreq) { c = &s_dma[ch]; break; }
         if (!c) break;
         unsigned e = elem(c);
-        while (put < n && c->hw.transfer_count) {
-            memcpy((void *)c->hw.write_addr, &in[put++], e);
-            if (c->cfg.write_inc) c->hw.write_addr = ring_step(c->hw.write_addr, e, c->cfg.ring_write ? c->cfg.ring_bits : 0);
-            c->hw.transfer_count--;
+        while (put < n && c->hw->transfer_count) {
+            memcpy((void *)c->hw->write_addr, &in[put++], e);
+            if (c->cfg.write_inc) c->hw->write_addr = ring_step(c->hw->write_addr, e, c->cfg.ring_write ? c->cfg.ring_bits : 0);
+            c->hw->transfer_count--;
         }
-        if (!c->hw.transfer_count) dma_complete(ch);
+        if (!c->hw->transfer_count) dma_complete(ch);
     }
     return put;
 }
@@ -458,21 +463,21 @@ void dma_channel_configure(uint ch, const dma_channel_config *cfg, volatile void
                            const volatile void *rd, uint count, bool trigger) {
     dma_ch_t *c = &s_dma[ch];
     c->cfg = *cfg;
-    c->hw.write_addr = (uintptr_t)wr;
-    c->hw.read_addr = (uintptr_t)rd;
-    c->hw.transfer_count = count;
+    c->hw->write_addr = (uintptr_t)wr;
+    c->hw->read_addr = (uintptr_t)rd;
+    c->hw->transfer_count = count;
     c->reload = count;
-    c->hw.al1_transfer_count_trig = 0;
+    c->hw->al1_transfer_count_trig = 0;
     c->rx_armed = false;
     c->busy = false;
     if (trigger) dma_start(ch);
 }
 void dma_channel_set_config(uint ch, const dma_channel_config *cfg, bool trigger) { s_dma[ch].cfg = *cfg; if (trigger) dma_start(ch); }
-void dma_channel_set_read_addr(uint ch, const volatile void *a, bool t) { s_dma[ch].hw.read_addr = (uintptr_t)a; if (t) dma_start(ch); }
-void dma_channel_set_write_addr(uint ch, volatile void *a, bool t) { s_dma[ch].hw.write_addr = (uintptr_t)a; if (t) dma_start(ch); }
-void dma_channel_set_trans_count(uint ch, uint32_t n, bool t) { s_dma[ch].reload = n; if (!s_dma[ch].busy) s_dma[ch].hw.transfer_count = n; if (t) dma_start(ch); }
-void dma_channel_transfer_from_buffer_now(uint ch, const volatile void *rd, uint32_t n) { s_dma[ch].hw.read_addr = (uintptr_t)rd; s_dma[ch].reload = n; dma_start(ch); }
-void dma_channel_transfer_to_buffer_now(uint ch, volatile void *wr, uint32_t n) { s_dma[ch].hw.write_addr = (uintptr_t)wr; s_dma[ch].reload = n; dma_start(ch); }
+void dma_channel_set_read_addr(uint ch, const volatile void *a, bool t) { s_dma[ch].hw->read_addr = (uintptr_t)a; if (t) dma_start(ch); }
+void dma_channel_set_write_addr(uint ch, volatile void *a, bool t) { s_dma[ch].hw->write_addr = (uintptr_t)a; if (t) dma_start(ch); }
+void dma_channel_set_trans_count(uint ch, uint32_t n, bool t) { s_dma[ch].reload = n; if (!s_dma[ch].busy) s_dma[ch].hw->transfer_count = n; if (t) dma_start(ch); }
+void dma_channel_transfer_from_buffer_now(uint ch, const volatile void *rd, uint32_t n) { s_dma[ch].hw->read_addr = (uintptr_t)rd; s_dma[ch].reload = n; dma_start(ch); }
+void dma_channel_transfer_to_buffer_now(uint ch, volatile void *wr, uint32_t n) { s_dma[ch].hw->write_addr = (uintptr_t)wr; s_dma[ch].reload = n; dma_start(ch); }
 void dma_channel_start(uint ch) { dma_start(ch); }
 void dma_channel_abort(uint ch) { s_dma[ch].busy = false; s_dma[ch].rx_armed = false; }
 void dma_channel_cleanup(uint ch) {
@@ -499,10 +504,10 @@ void emu_dma_uart_rx_deliver(unsigned u, const uint8_t *b, size_t n, size_t *tak
     uintptr_t dr = (uintptr_t)&emu_uart_inst[u].hw.dr;
     for (uint ch = 0; ch < NUM_DMA_CHANNELS; ch++) {
         dma_ch_t *c = &s_dma[ch];
-        if (!c->claimed || c->hw.read_addr != dr) continue;
-        if (!c->rx_armed && c->hw.al1_transfer_count_trig) {
-            uint32_t v = c->hw.al1_transfer_count_trig;
-            c->hw.al1_transfer_count_trig = 0;
+        if (!c->claimed || c->hw->read_addr != dr) continue;
+        if (!c->rx_armed && c->hw->al1_transfer_count_trig) {
+            uint32_t v = c->hw->al1_transfer_count_trig;
+            c->hw->al1_transfer_count_trig = 0;
             c->rx_armed = true;
             c->rx_endless = (v >> DMA_CH0_TRANS_COUNT_MODE_LSB) == DMA_CH0_TRANS_COUNT_MODE_VALUE_ENDLESS;
             c->rx_left = v & 0x0fffffffu;
@@ -512,9 +517,9 @@ void emu_dma_uart_rx_deliver(unsigned u, const uint8_t *b, size_t n, size_t *tak
         size_t i = 0;
         for (; i < n; i++) {
             if (!c->rx_endless && c->rx_left == 0) break;
-            uintptr_t wa = c->hw.write_addr;
+            uintptr_t wa = c->hw->write_addr;
             *(volatile uint8_t *)wa = b[i];
-            if (c->cfg.write_inc) c->hw.write_addr = ring_step(wa, 1, c->cfg.ring_write ? c->cfg.ring_bits : 0);
+            if (c->cfg.write_inc) c->hw->write_addr = ring_step(wa, 1, c->cfg.ring_write ? c->cfg.ring_bits : 0);
             if (!c->rx_endless) c->rx_left--;
         }
         *taken = i;

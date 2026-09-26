@@ -88,11 +88,16 @@ dma_channel_hw_t *dma_channel_hw_addr(uint channel);
  * a handler's write-1-to-clear is modelled by acknowledging every pending
  * channel once the handlers return. */
 typedef struct {
+    dma_channel_hw_t  ch[NUM_DMA_CHANNELS];      /* live channel registers */
     volatile uint32_t intr, inte0, intf0, ints0, inte1, intf1, ints1;
     volatile uint32_t multi_chan_trigger;
 } dma_hw_t;
 extern dma_hw_t emu_dma_hw;
-#define dma_hw (&emu_dma_hw)
+/* Every dma_hw access services the emulator (rate-limited, re-entrancy safe),
+ * so a driver that spins on a live register — e.g. polling a free-running
+ * channel's write_addr — sees the transfer advance, as it would on silicon. */
+dma_hw_t *emu_dma_hw_access(void);
+#define dma_hw (emu_dma_hw_access())
 
 dma_channel_config dma_channel_get_default_config(uint channel);
 dma_channel_config dma_get_channel_config(uint channel);

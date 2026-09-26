@@ -106,11 +106,11 @@ static void exec(char *line, uint64_t now) {
         bool dev = a2 && !strcmp(a2, "device");
         if (emu_screenshot(a1, dev) == 0) emu_log("script: screenshot -> %s", a1);
     } else if (!strcmp(cmd, "set")) {
-        float v[3];
+        float v[4];
         int n = 0;
-        char *vals[3] = { a2, a3, a4 };
-        for (int i = 0; i < 3 && vals[i]; i++) v[n++] = strtof(vals[i], NULL);
-        if (!a1 || !emu_sensor_set(a1, n, v)) emu_fatal("script line %d: set NAME V [V V] (temp rh lux accel gyro mag tilt noise)", ln + 1);
+        char *vals[4] = { a2, a3, a4, a5 };
+        for (int i = 0; i < 4 && vals[i]; i++) v[n++] = strtof(vals[i], NULL);
+        if (!a1 || !emu_sensor_set(a1, n, v)) emu_fatal("script line %d: set NAME V [V V V] (temp rh lux accel gyro mag tilt noise mics mic.A-D tone miclevel)", ln + 1);
         if (emu_verbose) { char d[160]; emu_sensor_describe(d, sizeof d); emu_log("sensors: %s", d); }
     } else if (!strcmp(cmd, "log")) {
         const char *rest = raw + 3;

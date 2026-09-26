@@ -66,6 +66,9 @@ add_library(freewili2_bsp STATIC
     ${_bsp}/audio/codec_nau88c10.c
     ${_bsp}/audio/audio_i2s_duplex.c
     ${_bsp}/audio/audio_capture.c
+    ${_bsp}/pdm/pdm_capture.c
+    ${_bsp}/dsp/cic.c
+    ${_bsp}/dsp/dcblock.c
     ${_bsp}/sensors/sht40.c
     ${_bsp}/sensors/opt4001.c
     ${_bsp}/sensors/bmi323.c
@@ -81,6 +84,7 @@ add_library(freewili2_bsp STATIC
     emu/src/dev_pic.c
     emu/src/dev_sensors.c
     emu/src/dev_audio.c
+    emu/src/dev_pdm.c
     emu/src/rtt.c
     emu/src/script.c
     emu/src/skin.c
@@ -119,7 +123,7 @@ include(cmake/fw2_emu_app.cmake)
 # ------------------------------------------------------------------ apps
 # WiliBSP's own apps, built straight from the submodule with their own
 # CMakeLists.txt. Your apps go in apps/ (see apps/README.md).
-set(FW2_EMU_UPSTREAM_APPS template hello_display hello_agentio hello_sensors hello_audio CACHE STRING "WiliBSP apps to build")
+set(FW2_EMU_UPSTREAM_APPS template hello_display hello_agentio hello_sensors hello_audio hello_mics CACHE STRING "WiliBSP apps to build")
 foreach(_app IN LISTS FW2_EMU_UPSTREAM_APPS)
     add_subdirectory("${WILIBSP_DIR}/apps/${_app}" "${CMAKE_BINARY_DIR}/wilibsp/${_app}")
 endforeach()

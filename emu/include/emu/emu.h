@@ -104,7 +104,9 @@ void emu_leds_init(void);
 void emu_leds_get(uint32_t out_rgb[EMU_NUM_LEDS]);
 
 /* IO expander (PCAL6524) */
-void emu_ioexp_init(void);
+void    emu_ioexp_init(void);
+uint8_t emu_ioexp_port(unsigned port);
+bool    emu_ioexp_output_high(unsigned port, unsigned bit);
 
 /* Board-manager coprocessor (PIC): buttons, charger, power zones */
 enum {
@@ -135,7 +137,13 @@ void  emu_audio_enable_host(bool on);               /* play through the PC's spe
 void  emu_audio_set_wav_out(const char *path);
 void  emu_audio_set_mic_wav(const char *path);      /* external sound reaching the mics */
 void  emu_audio_set_mic_level(float gain);
-float emu_audio_scene_sample(double fs, float speaker_bleed);
+float emu_audio_scene_at(double t_seconds, float speaker_bleed, uint32_t *rng);
+float emu_audio_speaker_now(void);
+void  emu_pdm_init(void);
+void  emu_pdm_task(void);
+bool  emu_audio_set(const char *name, int n, const float *v); /* "tone" hz amp | "miclevel" g */
+bool  emu_pdm_set(const char *name, int n, const float *v);   /* "mics" a,b,c,d | "mic.A" g */
+void  emu_pdm_describe(char *out, size_t cap);
 int   emu_audio_status(float *level);               /* bit0 speaker, bit1 jack */
 
 /* SEGGER RTT back end */

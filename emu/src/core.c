@@ -247,6 +247,7 @@ void emu_poll(void) {
 
     emu_touch_task();
     emu_audio_task();
+    emu_pdm_task();
     emu_pic_task();
     emu_rtt_task();
     emu_script_task();
@@ -343,7 +344,7 @@ static void usage(void) {
         "  --audio-out WAV     record everything the codec plays\n"
         "  --mic-wav WAV       sound reaching the microphones (looped)\n"
         "  --mute              don't play audio through the PC\n"
-        "  --sensor NAME=V     set a sensor: temp=24 rh=45 lux=320 accel=0,0,1\n"
+        "  --sensor NAME=V     set a sensor or sound: temp=24 lux=320 tilt=30,0 tone=1000,8000 mics=1,1,0,1\n"
         "                      gyro=0,0,0 mag=22,5,-40 tilt=PITCH,ROLL noise=1\n"
         "  -v                  verbose model logging\n");
 }
@@ -390,6 +391,7 @@ int main(int argc, char **argv) {
     emu_ioexp_init();
     emu_sensors_init();
     emu_audio_init();
+    emu_pdm_init();
     emu_pic_init(rails);
     emu_rtt_init(s_rtt_tcp);
 

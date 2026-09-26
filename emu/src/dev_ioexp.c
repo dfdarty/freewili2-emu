@@ -62,3 +62,11 @@ void emu_ioexp_init(void) {
 }
 
 uint8_t emu_ioexp_port(unsigned port) { return port < 3 ? X.out[port] : 0; }
+
+/* True when the pin is configured as an output (CFG bit 0) driving high and
+ * the expander itself is powered — i.e. the rail it switches is live. */
+bool emu_ioexp_output_high(unsigned port, unsigned bit) {
+    if (port >= 3 || bit >= 8 || !emu_rail_on(1)) return false;
+    uint8_t m = (uint8_t)(1u << bit);
+    return !(X.cfg[port] & m) && (X.out[port] & m);
+}

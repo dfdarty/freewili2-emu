@@ -53,7 +53,7 @@ bool emu_sensor_set(const char *name, int n, const float *v) {
     else if (!strcasecmp(name, "mag") && n >= 3) { W.mx = v[0]; W.my = v[1]; W.mz = v[2]; }
     else if (!strcasecmp(name, "tilt") && n >= 2) set_tilt(v[0], v[1]);
     else if (!strcasecmp(name, "noise") && n >= 1) W.noise = v[0];
-    else return false;
+    else return emu_pdm_set(name, n, v);        /* mics / mic.A..mic.D gains */
     return true;
 }
 
@@ -64,10 +64,10 @@ bool emu_sensor_set_str(const char *spec) {
     if (!eq || eq - spec >= (long)sizeof name) return false;
     memcpy(name, spec, (size_t)(eq - spec));
     name[eq - spec] = 0;
-    float v[3] = { 0, 0, 0 };
+    float v[4] = { 0, 0, 0, 0 };
     int n = 0;
     const char *p = eq + 1;
-    while (n < 3 && *p) {
+    while (n < 4 && *p) {
         char *end;
         v[n] = strtof(p, &end);
         if (end == p) break;

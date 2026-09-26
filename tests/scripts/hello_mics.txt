@@ -1,0 +1,7 @@
+# hello_mics: 4-mic PDM array -> pio1 -> free-running DMA ring -> CIC.
+# A 1 kHz tone reaches only mic C (rightmost), so only its meter moves.
+set mics 0 0 1 0
+set tone 1000 8000
+wait 1500
+screenshot out/hello_mics.png
+quit
