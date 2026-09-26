@@ -1,0 +1,10 @@
+# hello_display: requests RGB_LEDS (power-zone handshake), then paints touches.
+wait 4000
+touch 60 200
+touch 240 160
+drag 300 80 440 280 400
+wait 300
+screenshot out/hello_display.png device
+# WiliBSP recovery: HOME held 5 s exits the app
+hold HOME
+wait 5600

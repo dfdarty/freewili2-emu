@@ -1,0 +1,9 @@
+# hello_agentio: colour bars; buttons light a square, touches draw magenta dots.
+wait 3000
+press OK
+press UP
+touch 60 290
+touch 240 290
+wait 200
+screenshot out/hello_agentio.png
+quit

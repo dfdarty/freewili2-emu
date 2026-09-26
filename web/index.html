@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FREE-WILi 2 Emulator</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a20; --line: #2a2f38; --text: #e6e9ee;
+    --muted: #8b93a1; --accent: #4cc38a; --warn: #ffcc66;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  header { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center;
+           padding: 14px 20px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 15px; margin: 0; letter-spacing: .04em; }
+  header h1 span { color: var(--muted); font-weight: normal; }
+  label { color: var(--muted); }
+  select, button { background: var(--panel); color: var(--text); border: 1px solid var(--line);
+                   border-radius: 6px; padding: 6px 10px; font: inherit; }
+  button:hover, select:hover { border-color: #3d4450; }
+  #desc { color: var(--muted); flex: 1 1 260px; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 16px 20px 24px;
+         max-width: 1240px; margin: 0 auto; }
+  @media (min-width: 1180px) { main { grid-template-columns: 900px minmax(0, 1fr); } }
+  #stage { position: relative; width: 100%; max-width: 900px; aspect-ratio: 900 / 520; }
+  canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated;
+           border-radius: 14px; outline: none; background: #0f1115; }
+  #status { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted);
+            pointer-events: none; }
+  aside { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .card h2 { font-size: 12px; margin: 0 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  #log { height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 0; }
+  #log .emu { color: var(--muted); }
+  #log .err { color: var(--warn); }
+  kbd { background: #20242b; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;
+        padding: 0 5px; font: inherit; font-size: 12px; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 13px; }
+  dt { white-space: nowrap; }
+  dd { margin: 0; color: var(--muted); }
+  footer { color: var(--muted); font-size: 12px; padding: 0 20px 20px; max-width: 1240px; margin: 0 auto; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>FREE-WILi 2 <span>emulator</span></h1>
+  <label>app <select id="app"></select></label>
+  <button id="restart" type="button">Restart</button>
+  <span id="desc"></span>
+</header>
+<main>
+  <div id="stage">
+    <canvas id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
+    <div id="status">loading…</div>
+  </div>
+  <aside>
+    <div class="card">
+      <h2>Controls</h2>
+      <dl>
+        <dt><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> <kbd>Enter</kbd></dt><dd>D-pad</dd>
+        <dt><kbd>H</kbd> <kbd>O</kbd> <kbd>C</kbd> <kbd>P</kbd></dt><dd>HOME · OK · CANCEL · PAGE</dd>
+        <dt><kbd>1</kbd>–<kbd>5</kbd></dt><dd>grey · yellow · green · blue · red</dd>
+        <dt>click / drag</dt><dd>touch the screen, or press a key on the panel</dd>
+        <dt>hold <kbd>H</kbd> 5 s</dt><dd>exit the app (WiliBSP recovery)</dd>
+      </dl>
+    </div>
+    <div class="card">
+      <h2>RTT diagnostics</h2>
+      <pre id="log"></pre>
+    </div>
+  </aside>
+</main>
+<footer>
+  WiliBSP apps compiled unmodified against an emulated FREE-WILi 2 display CPU.
+  Timing, radios and analog are not modelled — verify on hardware.
+  <a href="https://github.com/dfdarty/freewili2-emu">source</a>
+</footer>
+<script>
+(async () => {
+  const sel = document.getElementById('app');
+  const desc = document.getElementById('desc');
+  const logEl = document.getElementById('log');
+  const statusEl = document.getElementById('status');
+  const canvas = document.getElementById('canvas');
+
+  let apps = [];
+  try { apps = await (await fetch('apps.json', { cache: 'no-store' })).json(); }
+  catch (e) { statusEl.textContent = 'apps.json missing'; return; }
+
+  const params = new URLSearchParams(location.search);
+  const want = params.get('app') || (apps[0] && apps[0].name);
+  for (const a of apps) {
+    const o = document.createElement('option');
+    o.value = a.name; o.textContent = a.name;
+    if (a.name === want) o.selected = true;
+    sel.appendChild(o);
+  }
+  const current = apps.find(a => a.name === want) || apps[0];
+  if (!current) { statusEl.textContent = 'no apps built'; return; }
+  desc.textContent = `v${current.version} — ${current.description}`;
+  document.title = `${current.name} — FREE-WILi 2 Emulator`;
+
+  sel.addEventListener('change', () => { params.set('app', sel.value); location.search = params.toString(); });
+  document.getElementById('restart').addEventListener('click', () => location.reload());
+
+  const MAX_LINES = 2000;
+  function log(text, cls) {
+    const line = document.createElement('div');
+    if (text.startsWith('[emu]')) line.className = 'emu';
+    if (cls) line.className = cls;
+    line.textContent = text.replace(/^\[diag\] /, '');
+    const stick = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 4;
+    logEl.appendChild(line);
+    while (logEl.childNodes.length > MAX_LINES) logEl.removeChild(logEl.firstChild);
+    if (stick) logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  window.Module = {
+    canvas,
+    arguments: (params.get('args') || '').split(' ').filter(Boolean),
+    print: t => log(t),
+    printErr: t => log(t, t.startsWith('[emu]') ? 'emu' : 'err'),
+    onRuntimeInitialized: () => { statusEl.textContent = ''; canvas.focus(); },
+    setStatus: t => { if (t) statusEl.textContent = t; },
+  };
+  canvas.addEventListener('pointerdown', () => canvas.focus());
+
+  const s = document.createElement('script');
+  s.src = `${current.name}.js`;
+  s.onerror = () => { statusEl.textContent = `could not load ${current.name}.js`; };
+  document.body.appendChild(s);
+})();
+</script>
+</body>
+</html>

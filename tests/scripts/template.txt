@@ -1,0 +1,4 @@
+# template: draws "HELLO FREEWILI2" once the display zone is confirmed on.
+wait 3000
+screenshot out/template.png device
+quit
