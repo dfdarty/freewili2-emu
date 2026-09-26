@@ -1,0 +1,10 @@
+# hello_sensors: all four I2C sensors decoded by WiliBSP's own drivers.
+wait 2500
+set temp 31.25
+set rh 72.5
+set lux 1234.5
+set tilt 30 0
+set mag 10 -20 -35
+wait 1500
+screenshot out/hello_sensors.png
+quit

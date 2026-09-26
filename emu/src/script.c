@@ -7,6 +7,7 @@
  *   touch X Y [MS]           tap the screen (default 120 ms)
  *   drag X1 Y1 X2 Y2 [MS]    swipe (default 300 ms)
  *   screenshot FILE [lcd|device]
+ *   set NAME V [V V]         sensors: temp rh lux accel gyro mag tilt noise
  *   log TEXT
  *   quit
  * Buttons: GREY YELLOW GREEN BLUE RED CENTER UP DOWN LEFT RIGHT HOME OK CANCEL PAGE
@@ -104,6 +105,13 @@ static void exec(char *line, uint64_t now) {
         if (!a1) emu_fatal("script line %d: screenshot FILE [lcd|device]", ln + 1);
         bool dev = a2 && !strcmp(a2, "device");
         if (emu_screenshot(a1, dev) == 0) emu_log("script: screenshot -> %s", a1);
+    } else if (!strcmp(cmd, "set")) {
+        float v[3];
+        int n = 0;
+        char *vals[3] = { a2, a3, a4 };
+        for (int i = 0; i < 3 && vals[i]; i++) v[n++] = strtof(vals[i], NULL);
+        if (!a1 || !emu_sensor_set(a1, n, v)) emu_fatal("script line %d: set NAME V [V V] (temp rh lux accel gyro mag tilt noise)", ln + 1);
+        if (emu_verbose) { char d[160]; emu_sensor_describe(d, sizeof d); emu_log("sensors: %s", d); }
     } else if (!strcmp(cmd, "log")) {
         const char *rest = raw + 3;
         while (*rest == ' ' || *rest == '\t') rest++;
@@ -113,6 +121,24 @@ static void exec(char *line, uint64_t now) {
     } else {
         emu_fatal("script line %d: unknown command '%s'", ln + 1, cmd);
     }
+}
+
+/* Immediate command from outside the script timeline (e.g. the web page).
+ * Timed commands (press/touch/drag) still use their durations; `wait` and
+ * `quit` are not accepted here. */
+bool emu_script_exec_line(const char *line) {
+    char buf[512];
+    snprintf(buf, sizeof buf, "%s", line);
+    char *p = buf;
+    while (*p == ' ') p++;
+    if (!*p || !strncmp(p, "wait", 4) || !strncmp(p, "quit", 4)) return false;
+    static const char *const ok[] = { "press", "hold", "release", "touch", "drag", "set", "log", "screenshot" };
+    bool known = false;
+    for (size_t i = 0; i < sizeof ok / sizeof ok[0]; i++)
+        if (!strncmp(p, ok[i], strlen(ok[i]))) known = true;
+    if (!known) return false;
+    exec(p, emu_time_us());
+    return true;
 }
 
 void emu_script_task(void) {

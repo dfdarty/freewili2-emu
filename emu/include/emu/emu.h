@@ -111,6 +111,12 @@ bool     emu_rail_on(unsigned zone);
 const char *emu_btn_name(unsigned btn);
 int      emu_btn_from_name(const char *name);
 
+/* On-board I2C sensors (SHT40, OPT4001, BMI323, BMM350) */
+void emu_sensors_init(void);
+bool emu_sensor_set(const char *name, int n, const float *v);
+bool emu_sensor_set_str(const char *spec);          /* "lux=300" "accel=0,0,1" */
+void emu_sensor_describe(char *out, size_t cap);
+
 /* SEGGER RTT back end */
 void emu_rtt_init(bool tcp);
 void emu_rtt_task(void);
@@ -122,12 +128,15 @@ bool emu_psram_map(void);
 void emu_script_load(const char *path);
 void emu_script_task(void);
 bool emu_script_active(void);
+bool emu_script_exec_line(const char *line);        /* immediate command, e.g. from the web page */
 int  emu_screenshot(const char *path, bool full_device);
 
 /* Front panel renderer (software; used by the window and by screenshots) */
 #define EMU_SKIN_W 900
 #define EMU_SKIN_H 520
 void emu_skin_render(uint32_t *out /* EMU_SKIN_W*EMU_SKIN_H */);
+int  emu_skin_frame(uint32_t *out);            /* 0 unchanged, 1 LCD only, 2 full */
+void emu_skin_lcd_rect(int *x, int *y, int *w, int *h);
 int  emu_skin_hit_button(int x, int y);        /* -1 if none            */
 bool emu_skin_to_lcd(int x, int y, int *lx, int *ly);
 

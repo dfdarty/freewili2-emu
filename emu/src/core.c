@@ -19,6 +19,13 @@
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
+/* The page queues script-syntax commands (sensor sliders, buttons); the
+ * emulator pulls them each frame, so JS never calls into a suspended program. */
+EM_JS(char *, js_take_command, (void), {
+    const q = Module.fw2Commands;
+    if (!q || !q.length) return 0;
+    return stringToNewUTF8(q.shift());
+});
 #else
 #include <unistd.h>
 #endif
@@ -202,8 +209,15 @@ static void window_events(void) {
 }
 
 static void window_present(void) {
-    emu_skin_render(s_skin);
-    SDL_UpdateTexture(s_tex, NULL, s_skin, EMU_SKIN_W * 4);
+    int kind = emu_skin_frame(s_skin);
+    if (kind == 0) return;                          /* nothing changed: skip the upload */
+    if (kind == 1) {
+        SDL_Rect r;
+        emu_skin_lcd_rect(&r.x, &r.y, &r.w, &r.h);
+        SDL_UpdateTexture(s_tex, &r, s_skin + r.y * EMU_SKIN_W + r.x, EMU_SKIN_W * 4);
+    } else {
+        SDL_UpdateTexture(s_tex, NULL, s_skin, EMU_SKIN_W * 4);
+    }
     SDL_RenderClear(s_ren);
     SDL_RenderCopy(s_ren, s_tex, NULL, NULL);
     SDL_RenderPresent(s_ren);
@@ -243,6 +257,10 @@ void emu_poll(void) {
     if (!s_headless && now - s_last_frame_us >= 16667u) {
         s_last_frame_us = now;
         window_events();
+#ifdef __EMSCRIPTEN__
+        for (char *cmd; (cmd = js_take_command()) != NULL; free(cmd))
+            if (!emu_script_exec_line(cmd)) emu_log("web: bad command '%s'", cmd);
+#endif
         window_present();
 #ifdef __EMSCRIPTEN__
         emscripten_sleep(0);                           /* hand the browser a turn */
@@ -253,13 +271,24 @@ void emu_poll(void) {
 
 void emu_sleep_us(uint64_t us) {
     uint64_t end = emu_time_us() + us;
+    if (emu_verbose > 1) emu_log("sleep %llu us", (unsigned long long)us);
     for (;;) {
         emu_poll();
         uint64_t now = emu_time_us();
         if (now >= end) return;
         uint64_t left = end - now;
+#ifdef __EMSCRIPTEN__
+        /* Every browser timer turn costs >=4 ms, so yield once per chunk (up
+         * to the next frame) instead of in 1 ms slices. */
+        if (left >= 1000u) {
+            uint64_t ms = left / 1000u;
+            emscripten_sleep((unsigned)(ms > 16 ? 16 : ms));
+            continue;
+        }
+#else
         if (left > 1000u) os_sleep_us(1000u);
         else if (left > 100u) os_sleep_us(left - 50u);
+#endif
     }
 }
 
@@ -309,6 +338,8 @@ static void usage(void) {
         "  --rtt               serve RTT on 127.0.0.1:9090 (DIAG) and :9091 (agentio)\n"
         "  --rails HEX         power zones already on at launch (default 0x8183)\n"
         "  --scale N           window scale factor (default 1)\n"
+        "  --sensor NAME=V     set a sensor: temp=24 rh=45 lux=320 accel=0,0,1\n"
+        "                      gyro=0,0,0 mag=22,5,-40 tilt=PITCH,ROLL noise=1\n"
         "  -v                  verbose model logging\n");
 }
 
@@ -326,7 +357,11 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--rtt")) s_rtt_tcp = true;
         else if (!strcmp(a, "--rails") && i + 1 < argc) rails = (uint32_t)strtoul(argv[++i], NULL, 16);
         else if (!strcmp(a, "--scale") && i + 1 < argc) s_scale = atoi(argv[++i]) > 0 ? atoi(argv[i]) : 1;
+        else if (!strcmp(a, "--sensor") && i + 1 < argc) {
+            if (!emu_sensor_set_str(argv[++i])) { fprintf(stderr, "bad --sensor %s\n", argv[i]); return 1; }
+        }
         else if (!strcmp(a, "-v")) emu_verbose = 1;
+        else if (!strcmp(a, "-vv")) emu_verbose = 2;
         else if (!strcmp(a, "-h") || !strcmp(a, "--help")) { usage(); return 0; }
         else { usage(); return 1; }
     }
@@ -345,6 +380,7 @@ int main(int argc, char **argv) {
     emu_touch_init();
     emu_leds_init();
     emu_ioexp_init();
+    emu_sensors_init();
     emu_pic_init(rails);
     emu_rtt_init(s_rtt_tcp);
 

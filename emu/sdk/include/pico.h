@@ -14,6 +14,10 @@
 
 typedef unsigned int uint;
 
+#ifndef PICO_BUILD
+#define PICO_BUILD 1      /* the SDK defines this for every target build */
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

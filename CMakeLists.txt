@@ -63,6 +63,11 @@ add_library(freewili2_bsp STATIC
     ${_bsp}/gfx/palette.c
     ${_bsp}/audio/tone_gen.c
     ${_bsp}/audio/vu_meter.c
+    ${_bsp}/sensors/sht40.c
+    ${_bsp}/sensors/opt4001.c
+    ${_bsp}/sensors/bmi323.c
+    ${_bsp}/sensors/bmm350.c
+    ${_bsp}/sensors/bmm350_comp.c
     # --- emulator ---
     emu/src/core.c
     emu/src/sdk_periph.c
@@ -71,6 +76,7 @@ add_library(freewili2_bsp STATIC
     emu/src/dev_leds.c
     emu/src/dev_ioexp.c
     emu/src/dev_pic.c
+    emu/src/dev_sensors.c
     emu/src/rtt.c
     emu/src/script.c
     emu/src/skin.c
@@ -85,6 +91,7 @@ target_include_directories(freewili2_bsp BEFORE PUBLIC
 target_compile_definitions(freewili2_bsp PUBLIC
     FW2_AGENTIO=$<BOOL:${FW2_AGENTIO}>
     FW2_EMULATOR=1
+    PICO_BUILD=1
     _GNU_SOURCE)
 target_compile_options(freewili2_bsp PRIVATE -Wall -Wno-unused-parameter -Wno-unused-function)
 
@@ -108,7 +115,7 @@ include(cmake/fw2_emu_app.cmake)
 # ------------------------------------------------------------------ apps
 # WiliBSP's own apps, built straight from the submodule with their own
 # CMakeLists.txt. Your apps go in apps/ (see apps/README.md).
-set(FW2_EMU_UPSTREAM_APPS template hello_display hello_agentio CACHE STRING "WiliBSP apps to build")
+set(FW2_EMU_UPSTREAM_APPS template hello_display hello_agentio hello_sensors CACHE STRING "WiliBSP apps to build")
 foreach(_app IN LISTS FW2_EMU_UPSTREAM_APPS)
     add_subdirectory("${WILIBSP_DIR}/apps/${_app}" "${CMAKE_BINARY_DIR}/wilibsp/${_app}")
 endforeach()

@@ -41,6 +41,10 @@
   dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 13px; }
   dt { white-space: nowrap; }
   dd { margin: 0; color: var(--muted); }
+  .sl { display: grid; grid-template-columns: 74px 1fr 64px; gap: 4px 10px; align-items: center; font-size: 13px; }
+  .sl label { color: var(--muted); }
+  .sl output { text-align: right; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
   footer { color: var(--muted); font-size: 12px; padding: 0 20px 20px; max-width: 1240px; margin: 0 auto; }
   a { color: var(--accent); }
 </style>
@@ -67,6 +71,10 @@
         <dt>click / drag</dt><dd>touch the screen, or press a key on the panel</dd>
         <dt>hold <kbd>H</kbd> 5 s</dt><dd>exit the app (WiliBSP recovery)</dd>
       </dl>
+    </div>
+    <div class="card">
+      <h2>Sensors</h2>
+      <div class="sl" id="sensors"></div>
     </div>
     <div class="card">
       <h2>RTT diagnostics</h2>
@@ -128,6 +136,49 @@
     setStatus: t => { if (t) statusEl.textContent = t; },
   };
   canvas.addEventListener('pointerdown', () => canvas.focus());
+
+  // ---- sensor sliders -> emulator commands (script syntax, see docs/scripting.md)
+  Module.fw2Commands = [];
+  const send = cmd => Module.fw2Commands.push(cmd);
+  const S = { temp: 24, rh: 45, lux: 320, pitch: 0, roll: 0, heading: 0 };
+  const defs = [
+    ['temp', 'Temp °C', -20, 60, 0.5, v => v.toFixed(1)],
+    ['rh', 'Humidity %', 0, 100, 1, v => v.toFixed(0)],
+    ['lux', 'Light lux', 0, 4.5, 0.01, v => Math.round(10 ** v - 1).toString(), v => Math.log10(v + 1)],
+    ['pitch', 'Pitch °', -90, 90, 1, v => v.toFixed(0)],
+    ['roll', 'Roll °', -180, 180, 1, v => v.toFixed(0)],
+    ['heading', 'Heading °', 0, 359, 1, v => v.toFixed(0)],
+  ];
+  const box = document.getElementById('sensors');
+  function apply(key) {
+    if (key === 'temp') send(`set temp ${S.temp}`);
+    else if (key === 'rh') send(`set rh ${S.rh}`);
+    else if (key === 'lux') send(`set lux ${S.lux}`);
+    else if (key === 'pitch' || key === 'roll') send(`set tilt ${S.pitch} ${S.roll}`);
+    else if (key === 'heading') {               // ~Florida field: 26 uT horizontal, 38 uT down
+      const h = S.heading * Math.PI / 180;
+      send(`set mag ${(26 * Math.cos(h)).toFixed(2)} ${(-26 * Math.sin(h)).toFixed(2)} -38`);
+    }
+  }
+  for (const [key, name, min, max, step, fmt, toSlider] of defs) {
+    const id = `s_${key}`;
+    const lab = document.createElement('label'); lab.htmlFor = id; lab.textContent = name;
+    const inp = Object.assign(document.createElement('input'), { type: 'range', id, min, max, step });
+    inp.value = toSlider ? toSlider(S[key]) : S[key];
+    const out = document.createElement('output'); out.textContent = fmt(Number(inp.value));
+    inp.addEventListener('input', () => {
+      const v = Number(inp.value);
+      S[key] = key === 'lux' ? Math.round(10 ** v - 1) : v;
+      out.textContent = fmt(v);
+      apply(key);
+    });
+    box.append(lab, inp, out);
+  }
+  const nl = document.createElement('label'); nl.textContent = 'Noise';
+  const nb = Object.assign(document.createElement('input'), { type: 'checkbox' });
+  nb.addEventListener('change', () => send(`set noise ${nb.checked ? 1 : 0}`));
+  box.append(nl, nb, document.createElement('span'));
+  apply('heading');
 
   const s = document.createElement('script');
   s.src = `${current.name}.js`;

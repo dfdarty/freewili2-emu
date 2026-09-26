@@ -8,6 +8,7 @@
 #include "display/font5x7.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 bool emu_app_has_exited(const char **why);
@@ -20,9 +21,9 @@ extern const unsigned char fw2app_uf2_info[];
 #define W EMU_SKIN_W
 #define H EMU_SKIN_H
 
-typedef struct { int btn, x, y, w, h; uint32_t color; const char *label; bool round; } key_t;
+typedef struct { int btn, x, y, w, h; uint32_t color; const char *label; bool round; } panel_key_t;
 
-static const key_t KEYS[] = {
+static const panel_key_t KEYS[] = {
     { EMU_BTN_UP,     95, 172, 40, 40, 0x3a3f48, "",       false },
     { EMU_BTN_DOWN,   95, 252, 40, 40, 0x3a3f48, "",       false },
     { EMU_BTN_LEFT,   55, 212, 40, 40, 0x3a3f48, "",       false },
@@ -82,7 +83,7 @@ static int text(int x, int y, int s, uint32_t c, const char *str) {
 
 static int text_w(const char *s, int scale) { return (int)strlen(s) * 6 * scale; }
 
-static void draw_key(const key_t *k, bool down) {
+static void draw_key(const panel_key_t *k, bool down) {
     uint32_t base = k->color;
     uint32_t fill = down ? mix(base, 0xffffff, 110) : base;
     int ox = down ? 1 : 0;
@@ -102,40 +103,34 @@ static void draw_key(const key_t *k, bool down) {
     }
 }
 
-void emu_skin_render(uint32_t *out) {
-    px = out;
+/* Static parts of the panel, drawn once. */
+static uint32_t *s_base;
+
+static void draw_static(void) {
     rect(0, 0, W, H, 0x0f1115);
     rrect(18, 18, W - 36, H - 36, 26, 0x2b3038);
     rrect(20, 20, W - 40, H - 40, 24, 0x22262d);
-
-    /* title + app */
     text(44, 36, 2, 0xe8ebf0, "FREE-WILi 2");
     text(196, 43, 1, 0x7d8490, "EMULATOR");
     const char *name = (const char *)fw2app_uf2_info + 16;   /* fw2app_uf2_info_t.name */
     char app[64];
     snprintf(app, sizeof app, "APP: %.31s", name);
     text(W - 44 - text_w(app, 1), 40, 1, 0x9aa1ac, app);
-
-    /* WS2812 chain */
-    uint32_t leds[EMU_NUM_LEDS];
-    emu_leds_get(leds);
-    for (int i = 0; i < EMU_NUM_LEDS; i++) {
-        int cx = 290 + i * 21, cy = 58;
-        circle(cx, cy, 7, 0x15171b);
-        uint32_t c = leds[i];
-        if (c) { circle(cx, cy, 7, mix(c, 0xffffff, 30)); circle(cx, cy, 4, mix(c, 0xffffff, 120)); }
-        else circle(cx, cy, 5, 0x30353d);
-    }
-
-    /* LCD + bezel */
+    for (int i = 0; i < EMU_NUM_LEDS; i++) circle(290 + i * 21, 58, 7, 0x15171b);
     rrect(LCD_X - 10, LCD_Y - 10, EMU_LCD_W + 20, EMU_LCD_H + 20, 8, 0x0a0b0d);
+    for (int i = 0; i < NKEYS; i++) draw_key(&KEYS[i], false);
+    text(44, 484, 1, 0x5d636d, "KEYS: ARROWS+ENTER DPAD  H O C P  1-5 CONTEXT  F2 SCREENSHOT");
+}
+
+static void draw_lcd(void) {
     const uint32_t *lcd = emu_lcd_pixels();
     for (int y = 0; y < EMU_LCD_H; y++) memcpy(&px[(LCD_Y + y) * W + LCD_X], &lcd[y * EMU_LCD_W], EMU_LCD_W * 4);
-
     int tx, ty;
     if (emu_touch_get(&tx, &ty))   /* crosshair where the finger is */
-        for (int i = -12; i <= 12; i++) { put(LCD_X + tx + i, LCD_Y + ty, 0x00e5ff); put(LCD_X + tx, LCD_Y + ty + i, 0x00e5ff); }
-
+        for (int i = -12; i <= 12; i++) {
+            if (tx + i >= 0 && tx + i < EMU_LCD_W) put(LCD_X + tx + i, LCD_Y + ty, 0x00e5ff);
+            if (ty + i >= 0 && ty + i < EMU_LCD_H) put(LCD_X + tx, LCD_Y + ty + i, 0x00e5ff);
+        }
     const char *why = NULL;
     if (emu_app_has_exited(&why)) {
         rect(LCD_X, LCD_Y + EMU_LCD_H / 2 - 24, EMU_LCD_W, 48, 0x000000);
@@ -144,24 +139,69 @@ void emu_skin_render(uint32_t *out) {
         snprintf(msg, sizeof msg, "%.78s", why ? why : "");
         text(LCD_X + 12, LCD_Y + EMU_LCD_H / 2 + 6, 1, 0xe8ebf0, msg);
     }
+}
 
-    /* keys */
-    uint16_t held = emu_pic_buttons();
-    for (int i = 0; i < NKEYS; i++) draw_key(&KEYS[i], (held >> KEYS[i].btn) & 1);
-
-    /* power zones */
+static void draw_dynamic(const uint32_t leds[EMU_NUM_LEDS], uint16_t held, uint32_t rails) {
+    for (int i = 0; i < EMU_NUM_LEDS; i++) {
+        int cx = 290 + i * 21, cy = 58;
+        uint32_t c = leds[i];
+        if (c) { circle(cx, cy, 7, mix(c, 0xffffff, 30)); circle(cx, cy, 4, mix(c, 0xffffff, 120)); }
+        else circle(cx, cy, 5, 0x30353d);
+    }
+    for (int i = 0; i < NKEYS; i++)
+        if ((held >> KEYS[i].btn) & 1) draw_key(&KEYS[i], true);
     char line[200];
     int n = snprintf(line, sizeof line, "ZONES ON:");
-    uint32_t rails = emu_pic_rails();
     for (unsigned z = 1; z <= 17 && n < (int)sizeof line - 16; z++)
         if (rails & (1u << (z - 1))) n += snprintf(line + n, sizeof line - (size_t)n, " %s", emu_zone_name(z));
     text(44, 470, 1, 0x7d8490, line);
-    text(44, 484, 1, 0x5d636d, "KEYS: ARROWS+ENTER DPAD  H O C P  1-5 CONTEXT  F2 SCREENSHOT");
 }
+
+void emu_skin_render(uint32_t *out) {
+    if (!s_base) {
+        s_base = (uint32_t *)malloc((size_t)W * H * 4);
+        px = s_base;
+        draw_static();
+    }
+    memcpy(out, s_base, (size_t)W * H * 4);
+    px = out;
+    uint32_t leds[EMU_NUM_LEDS];
+    emu_leds_get(leds);
+    draw_dynamic(leds, emu_pic_buttons(), emu_pic_rails());
+    draw_lcd();
+}
+
+/* Incremental frame for the window: returns 0 if nothing visible changed,
+ * 1 if only the LCD area changed (out updated there), 2 for a full redraw. */
+int emu_skin_frame(uint32_t *out) {
+    static bool first = true;
+    static uint32_t p_leds[EMU_NUM_LEDS];
+    static uint16_t p_held;
+    static uint32_t p_rails;
+    static int p_tx = -1, p_ty = -1;
+    static bool p_touch, p_exit;
+    uint32_t leds[EMU_NUM_LEDS];
+    emu_leds_get(leds);
+    uint16_t held = emu_pic_buttons();
+    uint32_t rails = emu_pic_rails();
+    int tx, ty;
+    bool touch = emu_touch_get(&tx, &ty);
+    bool ex = emu_app_has_exited(NULL);
+    bool panel = first || memcmp(leds, p_leds, sizeof leds) || held != p_held || rails != p_rails;
+    bool lcd = emu_lcd_changed() || touch != p_touch || (touch && (tx != p_tx || ty != p_ty)) || ex != p_exit;
+    memcpy(p_leds, leds, sizeof leds);
+    p_held = held; p_rails = rails; p_touch = touch; p_tx = tx; p_ty = ty; p_exit = ex;
+    first = false;
+    if (panel) { emu_skin_render(out); return 2; }
+    if (lcd) { px = out; draw_lcd(); return 1; }
+    return 0;
+}
+
+void emu_skin_lcd_rect(int *x, int *y, int *w, int *h) { *x = LCD_X; *y = LCD_Y; *w = EMU_LCD_W; *h = EMU_LCD_H; }
 
 int emu_skin_hit_button(int x, int y) {
     for (int i = 0; i < NKEYS; i++) {
-        const key_t *k = &KEYS[i];
+        const panel_key_t *k = &KEYS[i];
         if (x >= k->x - 4 && x < k->x + k->w + 4 && y >= k->y - 4 && y < k->y + k->h + 4) return k->btn;
     }
     return -1;

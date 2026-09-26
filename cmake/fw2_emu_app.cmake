@@ -7,6 +7,8 @@
 # changes. Instead of a UF2 the result is a host program; the app's main() is
 # renamed so the emulator can start first.
 
+set(FW2_EMU_WEB_ENV "web" CACHE STRING "Emscripten ENVIRONMENT (web; use web,node to run headless under Node)")
+
 function(fw2_display_app target)
     cmake_parse_arguments(PARSE_ARGV 1 APP "" "NAME;VERSION;DESCRIPTION;REPOSITORY" "POWER_ZONES")
     if(NOT APP_NAME)
@@ -75,7 +77,7 @@ function(fw2_display_app target)
             "-sALLOW_MEMORY_GROWTH=1" "-sINITIAL_MEMORY=304mb"
             "-sSTACK_SIZE=1048576"
             "-sEXIT_RUNTIME=0"
-            "-sENVIRONMENT=web"
+            "-sENVIRONMENT=${FW2_EMU_WEB_ENV}"
             "-sEXPORTED_RUNTIME_METHODS=callMain"
             "-sINVOKE_RUN=1")
     endif()
