@@ -34,6 +34,33 @@ option(FW2_AGENTIO "Build WiliBSP's agentio remote-control/capture harness" ${_a
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
+# ------------------------------------------------------------------ fidelity
+# Native-only build options that make host runs closer to (or stricter than)
+# the real RP2350. See docs/debugging.md.
+option(FW2_EMU_SANITIZE "Build app, BSP and emulator with AddressSanitizer + UBSan (native only)" OFF)
+option(FW2_EMU_32BIT "Build a 32-bit (-m32) emulator so pointer-size bugs show up as on the RP2350 (native only)" OFF)
+if(EMSCRIPTEN AND (FW2_EMU_SANITIZE OR FW2_EMU_32BIT))
+    message(FATAL_ERROR "FW2_EMU_SANITIZE and FW2_EMU_32BIT are for native builds (the web build is already 32-bit)")
+endif()
+if(FW2_EMU_SANITIZE)
+    # UBSan stays recoverable so tests/ubsan.supp can name known upstream
+    # findings; everything else halts (halt_on_error=1, set in emu/src/core.c).
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address,undefined)
+endif()
+if(FW2_EMU_32BIT)
+    # SSE math keeps float/double at IEEE single/double precision like the
+    # Cortex-M33 FPU, instead of x87's 80-bit intermediates.
+    add_compile_options(-m32 -msse2 -mfpmath=sse)
+    add_link_options(-m32)
+    # A 32-bit SDL2 (libsdl2-dev:i386) is often not installable next to the
+    # 64-bit toolchain, so the -m32 build is headless-only unless asked.
+    set(_sdl_default OFF)
+else()
+    set(_sdl_default ON)
+endif()
+option(FW2_EMU_SDL "Window and host audio via SDL2 (OFF: headless-only emulator, no SDL needed)" ${_sdl_default})
+
 # ------------------------------------------------------------------ BSP + emu
 set(_bsp "${WILIBSP_DIR}/bsp")
 add_library(freewili2_bsp STATIC
@@ -102,13 +129,22 @@ target_compile_definitions(freewili2_bsp PUBLIC
     PICO_BUILD=1
     _GNU_SOURCE)
 target_compile_options(freewili2_bsp PRIVATE -Wall -Wno-unused-parameter -Wno-unused-function)
+if(FW2_EMU_SANITIZE)
+    set_source_files_properties(emu/src/core.c PROPERTIES COMPILE_DEFINITIONS
+        "FW2_EMU_UBSAN_SUPPRESSIONS=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/ubsan.supp\"")
+endif()
 
 if(EMSCRIPTEN)
     target_compile_options(freewili2_bsp PUBLIC "-sUSE_SDL=2")
     target_link_options(freewili2_bsp PUBLIC "-sUSE_SDL=2")
 else()
-    find_package(SDL2 REQUIRED)
-    target_link_libraries(freewili2_bsp PUBLIC SDL2::SDL2 m)
+    if(FW2_EMU_SDL)
+        find_package(SDL2 REQUIRED)
+        target_link_libraries(freewili2_bsp PUBLIC SDL2::SDL2)
+    else()
+        target_compile_definitions(freewili2_bsp PRIVATE FW2EMU_HEADLESS_ONLY=1)
+    endif()
+    target_link_libraries(freewili2_bsp PUBLIC m)
     if(FW2_AGENTIO)
         # agentio keeps its screen shadow at the top of PSRAM and checks that the
         # linker placed nothing there (&__psram_end__ <= shadow). Nothing is placed

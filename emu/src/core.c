@@ -15,7 +15,9 @@
 #include <string.h>
 #include <time.h>
 
+#ifndef FW2EMU_HEADLESS_ONLY
 #include <SDL.h>
+#endif
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -28,6 +30,18 @@ EM_JS(char *, js_take_command, (void), {
 });
 #else
 #include <unistd.h>
+#endif
+
+#ifdef FW2_EMU_UBSAN_SUPPRESSIONS
+/* FW2_EMU_SANITIZE builds: stop at the first UBSan report, with a stack, but
+ * let tests/ubsan.supp name known upstream (WiliBSP) findings we cannot patch.
+ * Any of these can still be overridden with ASAN_OPTIONS / UBSAN_OPTIONS. */
+const char *__ubsan_default_options(void);
+const char *__ubsan_default_options(void) {
+    return "halt_on_error=1:print_stacktrace=1:suppressions=" FW2_EMU_UBSAN_SUPPRESSIONS;
+}
+const char *__asan_default_options(void);
+const char *__asan_default_options(void) { return "abort_on_error=0:detect_leaks=1"; }
 #endif
 
 int fw2_emu_app_main(void);
@@ -50,9 +64,11 @@ static const char   *s_exit_shot;
 static int           s_scale = 1;
 static bool          s_mute;
 
+#ifndef FW2EMU_HEADLESS_ONLY
 static SDL_Window   *s_win;
 static SDL_Renderer *s_ren;
 static SDL_Texture  *s_tex;
+#endif
 static uint32_t     *s_skin;
 
 /* ------------------------------------------------------------------ time */
@@ -105,6 +121,7 @@ void panic(const char *fmt, ...) {
 void panic_unsupported(void) { panic("unsupported operation"); }
 
 /* ---------------------------------------------------------------- window */
+#ifndef FW2EMU_HEADLESS_ONLY
 static int s_mouse_btn = -1;      /* skin button held by the mouse */
 static bool s_mouse_touch;        /* mouse is touching the LCD     */
 static uint16_t s_key_btns;       /* buttons held on the keyboard  */
@@ -236,6 +253,14 @@ static void window_open(void) {
                               EMU_SKIN_W, EMU_SKIN_H);
     if (!s_tex) emu_fatal("SDL_CreateTexture: %s", SDL_GetError());
 }
+#else
+/* Built with FW2_EMU_SDL=OFF (e.g. the -m32 build): no window, no host audio. */
+static void window_events(void) {}
+static void window_present(void) {}
+static void window_open(void) {
+    emu_fatal("this emulator was built without SDL (FW2_EMU_SDL=OFF); run it with --headless");
+}
+#endif
 
 /* ------------------------------------------------------------ poll/yield */
 void emu_poll(void) {
@@ -319,6 +344,8 @@ void emu_app_exit(const char *why) {
         window_present();
 #ifdef __EMSCRIPTEN__
         emscripten_sleep(50);
+#elif defined(FW2EMU_HEADLESS_ONLY)
+        os_sleep_us(30000);
 #else
         SDL_Delay(30);
 #endif

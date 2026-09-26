@@ -4,3 +4,4 @@ build-*/
 !docs/*.png
 sdcard/
 out/
+__pycache__/

@@ -1,0 +1,9 @@
+# UBSan findings in upstream WiliBSP code (third_party/wilibsp is never
+# patched here). Each entry is reported upstream; remove it once fixed there.
+# Loaded automatically by FW2_EMU_SANITIZE builds (see emu/src/core.c).
+
+# bsp/dsp/cic.c: the CIC integrators accumulate in int32_t and rely on
+# two's-complement wraparound, which is undefined for signed types. Arm GCC
+# happens to wrap, so it works on hardware today; declaring the accumulators
+# uint32_t (or computing in uint32_t) would make it well-defined.
+signed-integer-overflow:bsp/dsp/cic.c

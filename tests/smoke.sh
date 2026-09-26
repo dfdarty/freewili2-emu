@@ -2,16 +2,20 @@
 # Build natively and run every app headless with its script. Screenshots land
 # in out/. A tests/scripts/<app>.expect file lists regexes the log must
 # match (one per line). Exit status is non-zero if any app fails to start or crashes.
+#
+#   BUILD_DIR=build-asan CMAKE_ARGS="-DFW2_EMU_SANITIZE=ON" tests/smoke.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
-cmake -S . -B build -G Ninja >/dev/null
-cmake --build build
+build=${BUILD_DIR:-build}
+# shellcheck disable=SC2086
+cmake -S . -B "$build" -G Ninja ${CMAKE_ARGS:-} >/dev/null
+cmake --build "$build"
 mkdir -p out
 fail=0
 for s in tests/scripts/*.txt; do
     app=$(basename "$s" .txt)
-    [ -x "build/bin/$app" ] || { echo "skip $app (not built)"; continue; }
-    if timeout 60 "build/bin/$app" --headless --script "$s" --audio-out "out/$app.wav" > "out/$app.log" 2>&1; then
+    [ -x "$build/bin/$app" ] || { echo "skip $app (not built)"; continue; }
+    if timeout 60 "$build/bin/$app" --headless --script "$s" --audio-out "out/$app.wav" > "out/$app.log" 2>&1; then
         exp="tests/scripts/$app.expect"
         if [ -f "$exp" ]; then
             while IFS= read -r re; do
