@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: native build + smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build libsdl2-dev python3
+      - name: Build and run every app headless
+        run: tests/smoke.sh
+      - name: Upload screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-native
+          path: |
+            out/*.png
+            out/*.log
+          if-no-files-found: ignore
+
+  sanitize:
+    name: sanitizers (ASan + UBSan) + smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build libsdl2-dev python3
+      # ASan's shadow layout does not fit the 32-bit mmap randomisation that
+      # newer runner kernels use; 28 bits is the usual setting.
+      - name: Limit mmap randomisation for ASan
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
+      - name: Build with FW2_EMU_SANITIZE and run every app headless
+        run: tests/smoke.sh
+        env:
+          BUILD_DIR: build-asan
+          CMAKE_ARGS: -DFW2_EMU_SANITIZE=ON
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-sanitize
+          path: |
+            out/*.png
+            out/*.log
+          if-no-files-found: ignore
+
+  m32:
+    name: 32-bit build + smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build gcc-multilib python3
+      - name: Build with FW2_EMU_32BIT and run every app headless
+        run: tests/smoke.sh
+        env:
+          BUILD_DIR: build-m32
+          CMAKE_ARGS: -DFW2_EMU_32BIT=ON
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-m32
+          path: out/*.log
+          if-no-files-found: ignore
+
+  hwcheck:
+    name: real-hardware check (Pico SDK + Arm GCC)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive     # WiliBSP's libs/onewili is needed for hardware builds
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build python3 \
+            gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
+      - name: Cache Pico SDK and picotool
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/fw2emu
+          key: fw2emu-pico-sdk-2.3.0-${{ runner.os }}-${{ hashFiles('tools/fw2emu') }}
+          restore-keys: fw2emu-pico-sdk-2.3.0-${{ runner.os }}-
+      - name: Build every app for the RP2350 and check memory and stack
+        run: |
+          mkdir -p out
+          tools/fw2emu hwcheck -v -o out/hwcheck.json
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hwcheck
+          path: out/hwcheck.json
+          if-no-files-found: ignore
+
+  web:
+    name: web build (Emscripten 4.0.15)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build python3
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 4.0.15
+          actions-cache-folder: emsdk-cache
+      - name: Build
+        run: |
+          emcmake cmake -S . -B build-web -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-web
+          ls -l build-web/bin
