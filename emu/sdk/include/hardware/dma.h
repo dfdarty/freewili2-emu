@@ -10,6 +10,7 @@
 #define FW2EMU_HARDWARE_DMA_H
 
 #include "pico.h"
+#include "hardware/address_mapped.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -83,6 +84,16 @@ typedef struct {
 
 dma_channel_hw_t *dma_channel_hw_addr(uint channel);
 
+/* Global DMA registers. INTS0/1 hold the channels pending at IRQ dispatch;
+ * a handler's write-1-to-clear is modelled by acknowledging every pending
+ * channel once the handlers return. */
+typedef struct {
+    volatile uint32_t intr, inte0, intf0, ints0, inte1, intf1, ints1;
+    volatile uint32_t multi_chan_trigger;
+} dma_hw_t;
+extern dma_hw_t emu_dma_hw;
+#define dma_hw (&emu_dma_hw)
+
 dma_channel_config dma_channel_get_default_config(uint channel);
 dma_channel_config dma_get_channel_config(uint channel);
 static inline void channel_config_set_read_increment(dma_channel_config *c, bool inc) { c->read_inc = inc; }
@@ -113,6 +124,8 @@ void dma_channel_transfer_from_buffer_now(uint channel, const volatile void *rea
 void dma_channel_transfer_to_buffer_now(uint channel, volatile void *write_addr, uint32_t count);
 void dma_channel_start(uint channel);
 void dma_channel_abort(uint channel);
+void dma_channel_cleanup(uint channel);
+static inline void dma_start_channel_mask(uint32_t mask) { for (uint i = 0; i < NUM_DMA_CHANNELS; i++) if (mask & (1u << i)) dma_channel_start(i); }
 bool dma_channel_is_busy(uint channel);
 void dma_channel_wait_for_finish_blocking(uint channel);
 

@@ -1,0 +1,6 @@
+# hello_audio: codec init over I2C, 1 kHz tone through the I2S program model
+# (speaker for 4 s, then the jack), mic VU from the codec ADC.
+wait 5000
+screenshot out/hello_audio.png device
+wait 4500
+quit

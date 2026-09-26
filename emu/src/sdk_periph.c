@@ -10,6 +10,7 @@
 #include "hardware/irq.h"
 #include "hardware/pio.h"
 #include "hardware/psram.h"
+#include "hardware/pwm.h"
 #include "hardware/spi.h"
 #include "hardware/uart.h"
 #include "hardware/watchdog.h"
@@ -249,6 +250,7 @@ static bool s_irq_en[NUM_IRQS];
 void irq_set_exclusive_handler(uint n, irq_handler_t h) { memset(s_irq[n], 0, sizeof s_irq[n]); s_irq[n][0] = h; }
 void irq_add_shared_handler(uint n, irq_handler_t h, uint8_t order) {
     (void)order;
+    for (int i = 0; i < MAX_HANDLERS; i++) if (s_irq[n][i] == h) return;
     for (int i = 0; i < MAX_HANDLERS; i++) if (!s_irq[n][i]) { s_irq[n][i] = h; return; }
     emu_fatal("too many shared handlers on IRQ %u", n);
 }
@@ -258,24 +260,37 @@ void irq_remove_handler(uint n, irq_handler_t h) {
 void irq_set_enabled(uint n, bool en) { s_irq_en[n] = en; }
 bool irq_is_enabled(uint n) { return s_irq_en[n]; }
 
+static void dma_irq_dispatch(unsigned n);
+
 void emu_irq_raise(unsigned n) {
     static int depth;
     if (n >= NUM_IRQS || !s_irq_en[n] || depth > 4) return;
     depth++;
-    for (int i = 0; i < MAX_HANDLERS; i++) if (s_irq[n][i]) s_irq[n][i]();
+    if (n == DMA_IRQ_0 || n == DMA_IRQ_1) dma_irq_dispatch(n);
+    else for (int i = 0; i < MAX_HANDLERS; i++) if (s_irq[n][i]) s_irq[n][i]();
     depth--;
 }
 
 /* ================================================================= DMA */
+/* Three kinds of transfer:
+ *   immediate  memory->SPI (device consumes instantly) and memory->memory
+ *   paced      channels on a PIO DREQ move one element each time the PIO
+ *              model asks (emu_dma_dreq_pull / _push), in real time
+ *   UART RX    bytes from a UART model land in an armed channel's ring
+ * Completion reloads TRANS_COUNT from the last value written, triggers the
+ * CHAIN_TO channel and raises DMA_IRQ_0/1 — the behaviour the WiliBSP audio
+ * ping-pong and ring-loop code relies on. */
 typedef struct {
     dma_channel_hw_t   hw;
     dma_channel_config cfg;
+    uint32_t reload;                 /* TRANS_COUNT reload value */
     bool claimed, irq0_en, irq1_en, irq0_st, irq1_st, busy;
     bool rx_armed, rx_endless;
     uint32_t rx_left;
 } dma_ch_t;
 
 static dma_ch_t s_dma[NUM_DMA_CHANNELS];
+dma_hw_t emu_dma_hw;
 
 dma_channel_hw_t *dma_channel_hw_addr(uint ch) { return &s_dma[ch].hw; }
 
@@ -298,14 +313,42 @@ bool dma_channel_is_claimed(uint ch) { return s_dma[ch].claimed; }
 
 static unsigned elem(const dma_ch_t *c) { return 1u << c->cfg.size; }
 
+static bool is_paced_dreq(unsigned d) { return d < 48u; }        /* PIO TX/RX DREQs */
+
+static void dma_start(uint ch);
+
+static void dma_irq_dispatch(unsigned n) {
+    uint32_t pend = 0;
+    for (uint i = 0; i < NUM_DMA_CHANNELS; i++)
+        if (n == DMA_IRQ_0 ? (s_dma[i].irq0_st && s_dma[i].irq0_en) : (s_dma[i].irq1_st && s_dma[i].irq1_en))
+            pend |= 1u << i;
+    if (!pend) return;
+    if (n == DMA_IRQ_0) emu_dma_hw.ints0 = pend; else emu_dma_hw.ints1 = pend;
+    for (int i = 0; i < MAX_HANDLERS; i++) if (s_irq[n][i]) s_irq[n][i]();
+    for (uint i = 0; i < NUM_DMA_CHANNELS; i++)           /* W1C of INTSn by the handler */
+        if (pend & (1u << i)) { if (n == DMA_IRQ_0) s_dma[i].irq0_st = false; else s_dma[i].irq1_st = false; }
+    if (n == DMA_IRQ_0) emu_dma_hw.ints0 = 0; else emu_dma_hw.ints1 = 0;
+}
+
 static void dma_complete(uint ch) {
     dma_ch_t *c = &s_dma[ch];
     c->busy = false;
+    c->rx_armed = false;
     c->hw.transfer_count = 0;
+    bool fire0 = false, fire1 = false;
     if (!c->cfg.irq_quiet) {
-        if (c->irq0_en) { c->irq0_st = true; emu_irq_raise(DMA_IRQ_0); }
-        if (c->irq1_en) { c->irq1_st = true; emu_irq_raise(DMA_IRQ_1); }
+        if (c->irq0_en) { c->irq0_st = true; fire0 = true; }
+        if (c->irq1_en) { c->irq1_st = true; fire1 = true; }
     }
+    if (c->cfg.chain_to != ch && c->cfg.chain_to < NUM_DMA_CHANNELS) dma_start(c->cfg.chain_to);
+    if (fire0) emu_irq_raise(DMA_IRQ_0);
+    if (fire1) emu_irq_raise(DMA_IRQ_1);
+}
+
+static uintptr_t ring_step(uintptr_t a, unsigned step, unsigned ring_bits) {
+    if (!ring_bits) return a + step;
+    uintptr_t mask = ((uintptr_t)1 << ring_bits) - 1;
+    return (a & ~mask) | ((a + step) & mask);
 }
 
 static int spi_of(uintptr_t a) {
@@ -320,7 +363,8 @@ static int uart_of(uintptr_t a) {
 static void dma_start(uint ch) {
     dma_ch_t *c = &s_dma[ch];
     if (!c->cfg.enable) return;
-    uint32_t n = c->hw.transfer_count;
+    c->hw.transfer_count = c->reload;
+    uint32_t n = c->reload;
     int spi = spi_of(c->hw.write_addr);
     if (spi >= 0) {
         uint8_t chunk[512];
@@ -329,7 +373,7 @@ static void dma_start(uint ch) {
             uint32_t k = n < sizeof chunk ? n : (uint32_t)sizeof chunk;
             for (uint32_t i = 0; i < k; i++) {
                 chunk[i] = *(const volatile uint8_t *)rd;       /* 8-bit SPI frames */
-                if (c->cfg.read_inc) rd += elem(c);
+                if (c->cfg.read_inc) rd = ring_step(rd, elem(c), c->cfg.ring_write ? 0 : c->cfg.ring_bits);
             }
             emu_spi_bus_write((unsigned)spi, chunk, k);
             n -= k;
@@ -345,17 +389,69 @@ static void dma_start(uint ch) {
         c->busy = true;
         return;
     }
+    if (is_paced_dreq(c->cfg.dreq)) {          /* waits for the PIO model */
+        c->busy = n != 0;
+        if (!n) dma_complete(ch);
+        return;
+    }
     /* memory -> memory */
     uintptr_t rd = c->hw.read_addr, wr = c->hw.write_addr;
     unsigned e = elem(c);
     for (uint32_t i = 0; i < n; i++) {
         memcpy((void *)wr, (const void *)rd, e);
-        if (c->cfg.read_inc) rd += e;
-        if (c->cfg.write_inc) wr += e;
+        if (c->cfg.read_inc) rd = ring_step(rd, e, c->cfg.ring_write ? 0 : c->cfg.ring_bits);
+        if (c->cfg.write_inc) wr = ring_step(wr, e, c->cfg.ring_write ? c->cfg.ring_bits : 0);
     }
     c->hw.read_addr = rd;
     c->hw.write_addr = wr;
     dma_complete(ch);
+}
+
+/* Paced transfers, called by PIO models at their real data rate. */
+size_t emu_dma_dreq_pull(unsigned dreq, uint32_t *out, size_t max) {
+    size_t got = 0;
+    for (int guard = 0; got < max && guard < 64; guard++) {
+        dma_ch_t *c = NULL;
+        uint ch = 0;
+        for (; ch < NUM_DMA_CHANNELS; ch++)
+            if (s_dma[ch].busy && s_dma[ch].cfg.dreq == dreq) { c = &s_dma[ch]; break; }
+        if (!c) break;
+        unsigned e = elem(c);
+        while (got < max && c->hw.transfer_count) {
+            uint32_t v = 0;
+            memcpy(&v, (const void *)c->hw.read_addr, e);
+            out[got++] = v;
+            if (c->cfg.read_inc) c->hw.read_addr = ring_step(c->hw.read_addr, e, c->cfg.ring_write ? 0 : c->cfg.ring_bits);
+            c->hw.transfer_count--;
+        }
+        if (!c->hw.transfer_count) dma_complete(ch);
+    }
+    return got;
+}
+
+size_t emu_dma_dreq_push(unsigned dreq, const uint32_t *in, size_t n) {
+    size_t put = 0;
+    for (int guard = 0; put < n && guard < 64; guard++) {
+        dma_ch_t *c = NULL;
+        uint ch = 0;
+        for (; ch < NUM_DMA_CHANNELS; ch++)
+            if (s_dma[ch].busy && s_dma[ch].cfg.dreq == dreq) { c = &s_dma[ch]; break; }
+        if (!c) break;
+        unsigned e = elem(c);
+        while (put < n && c->hw.transfer_count) {
+            memcpy((void *)c->hw.write_addr, &in[put++], e);
+            if (c->cfg.write_inc) c->hw.write_addr = ring_step(c->hw.write_addr, e, c->cfg.ring_write ? c->cfg.ring_bits : 0);
+            c->hw.transfer_count--;
+        }
+        if (!c->hw.transfer_count) dma_complete(ch);
+    }
+    return put;
+}
+
+bool emu_dma_dreq_active(unsigned dreq) {
+    for (uint ch = 0; ch < NUM_DMA_CHANNELS; ch++)
+        if (s_dma[ch].busy && s_dma[ch].cfg.dreq == dreq) return true;
+    return false;
 }
 
 void dma_channel_configure(uint ch, const dma_channel_config *cfg, volatile void *wr,
@@ -365,18 +461,27 @@ void dma_channel_configure(uint ch, const dma_channel_config *cfg, volatile void
     c->hw.write_addr = (uintptr_t)wr;
     c->hw.read_addr = (uintptr_t)rd;
     c->hw.transfer_count = count;
+    c->reload = count;
     c->hw.al1_transfer_count_trig = 0;
     c->rx_armed = false;
+    c->busy = false;
     if (trigger) dma_start(ch);
 }
 void dma_channel_set_config(uint ch, const dma_channel_config *cfg, bool trigger) { s_dma[ch].cfg = *cfg; if (trigger) dma_start(ch); }
 void dma_channel_set_read_addr(uint ch, const volatile void *a, bool t) { s_dma[ch].hw.read_addr = (uintptr_t)a; if (t) dma_start(ch); }
 void dma_channel_set_write_addr(uint ch, volatile void *a, bool t) { s_dma[ch].hw.write_addr = (uintptr_t)a; if (t) dma_start(ch); }
-void dma_channel_set_trans_count(uint ch, uint32_t n, bool t) { s_dma[ch].hw.transfer_count = n; if (t) dma_start(ch); }
-void dma_channel_transfer_from_buffer_now(uint ch, const volatile void *rd, uint32_t n) { s_dma[ch].hw.read_addr = (uintptr_t)rd; s_dma[ch].hw.transfer_count = n; dma_start(ch); }
-void dma_channel_transfer_to_buffer_now(uint ch, volatile void *wr, uint32_t n) { s_dma[ch].hw.write_addr = (uintptr_t)wr; s_dma[ch].hw.transfer_count = n; dma_start(ch); }
+void dma_channel_set_trans_count(uint ch, uint32_t n, bool t) { s_dma[ch].reload = n; if (!s_dma[ch].busy) s_dma[ch].hw.transfer_count = n; if (t) dma_start(ch); }
+void dma_channel_transfer_from_buffer_now(uint ch, const volatile void *rd, uint32_t n) { s_dma[ch].hw.read_addr = (uintptr_t)rd; s_dma[ch].reload = n; dma_start(ch); }
+void dma_channel_transfer_to_buffer_now(uint ch, volatile void *wr, uint32_t n) { s_dma[ch].hw.write_addr = (uintptr_t)wr; s_dma[ch].reload = n; dma_start(ch); }
 void dma_channel_start(uint ch) { dma_start(ch); }
 void dma_channel_abort(uint ch) { s_dma[ch].busy = false; s_dma[ch].rx_armed = false; }
+void dma_channel_cleanup(uint ch) {
+    s_dma[ch].irq0_en = s_dma[ch].irq1_en = false;
+    s_dma[ch].cfg.chain_to = (uint8_t)ch;
+    s_dma[ch].cfg.enable = false;
+    dma_channel_abort(ch);
+    s_dma[ch].irq0_st = s_dma[ch].irq1_st = false;
+}
 bool dma_channel_is_busy(uint ch) { emu_poll(); return s_dma[ch].busy; }
 void dma_channel_wait_for_finish_blocking(uint ch) { while (s_dma[ch].busy) tight_loop_contents(); }
 void dma_channel_set_irq0_enabled(uint ch, bool en) { s_dma[ch].irq0_en = en; }
@@ -409,19 +514,11 @@ void emu_dma_uart_rx_deliver(unsigned u, const uint8_t *b, size_t n, size_t *tak
             if (!c->rx_endless && c->rx_left == 0) break;
             uintptr_t wa = c->hw.write_addr;
             *(volatile uint8_t *)wa = b[i];
-            if (c->cfg.write_inc) {
-                if (c->cfg.ring_write && c->cfg.ring_bits) {
-                    uintptr_t mask = ((uintptr_t)1 << c->cfg.ring_bits) - 1;
-                    wa = (wa & ~mask) | ((wa + 1) & mask);
-                } else {
-                    wa += 1;
-                }
-                c->hw.write_addr = wa;
-            }
+            if (c->cfg.write_inc) c->hw.write_addr = ring_step(wa, 1, c->cfg.ring_write ? c->cfg.ring_bits : 0);
             if (!c->rx_endless) c->rx_left--;
         }
         *taken = i;
-        if (!c->rx_endless && c->rx_left == 0) { c->rx_armed = false; dma_complete(ch); }
+        if (!c->rx_endless && c->rx_left == 0) dma_complete(ch);
         return;
     }
 }
@@ -430,18 +527,34 @@ void emu_dma_uart_rx_deliver(unsigned u, const uint8_t *b, size_t n, size_t *tak
 pio_hw_t emu_pio_inst[3] = { { .index = 0 }, { .index = 1 }, { .index = 2 } };
 static emu_pio_sm_device_t *s_pio_dev[3][4];
 static bool s_pio_en[3][4];
+static const pio_program_t *s_pio_prog[3][32];     /* program loaded at each offset */
+
+#define MAX_MODELS 8
+static struct { const char *name; emu_pio_model_bind_fn bind; } s_models[MAX_MODELS];
+static int s_nmodels;
+
+void emu_pio_model_register(const char *name, emu_pio_model_bind_fn bind) {
+    if (s_nmodels < MAX_MODELS) { s_models[s_nmodels].name = name; s_models[s_nmodels].bind = bind; s_nmodels++; }
+}
 
 void emu_pio_bind(unsigned p, unsigned sm, emu_pio_sm_device_t *d) { s_pio_dev[p][sm] = d; }
+emu_pio_sm_device_t *emu_pio_device(unsigned p, unsigned sm) { return s_pio_dev[p][sm]; }
+bool emu_pio_sm_enabled(unsigned p, unsigned sm) { return s_pio_en[p][sm]; }
 
 bool pio_can_add_program(PIO pio, const pio_program_t *prog) { return pio->instr_used + prog->length <= 32; }
 int pio_add_program(PIO pio, const pio_program_t *prog) {
     if (!pio_can_add_program(pio, prog)) return PICO_ERROR_INSUFFICIENT_RESOURCES;
     int off = (int)pio->instr_used;
+    s_pio_prog[pio->index][off] = prog;
     pio->instr_used += prog->length;
     return off;
 }
-int pio_add_program_at_offset(PIO pio, const pio_program_t *prog, uint off) { (void)prog; return (int)off; }
+int pio_add_program_at_offset(PIO pio, const pio_program_t *prog, uint off) {
+    if (off < 32) s_pio_prog[pio->index][off] = prog;
+    return (int)off;
+}
 void pio_remove_program(PIO pio, const pio_program_t *prog, uint off) {
+    if (off < 32) s_pio_prog[pio->index][off] = NULL;
     if (off + prog->length == pio->instr_used) pio->instr_used = off;
 }
 int pio_claim_unused_sm(PIO pio, bool required) {
@@ -453,11 +566,59 @@ int pio_claim_unused_sm(PIO pio, bool required) {
 void pio_sm_claim(PIO pio, uint sm) { pio->sm_claimed |= (uint8_t)(1u << sm); }
 void pio_sm_unclaim(PIO pio, uint sm) { pio->sm_claimed &= (uint8_t)~(1u << sm); s_pio_dev[pio->index][sm] = NULL; }
 bool pio_sm_is_claimed(PIO pio, uint sm) { return pio->sm_claimed & (1u << sm); }
+
+int pio_sm_init(PIO pio, uint sm, uint pc, const pio_sm_config *cfg) {
+    pio->sm[sm].clkdiv = cfg->clkdiv;
+    pio->sm[sm].execctrl = cfg->execctrl;
+    pio->sm[sm].shiftctrl = cfg->shiftctrl;
+    pio->sm[sm].pinctrl = cfg->pinctrl;
+    s_pio_en[pio->index][sm] = false;
+    const pio_program_t *prog = pc < 32 ? s_pio_prog[pio->index][pc] : NULL;
+    if (prog && prog->emu_model) {
+        for (int i = 0; i < s_nmodels; i++)
+            if (!strcmp(s_models[i].name, prog->emu_model)) { s_models[i].bind(pio, sm); return 0; }
+        emu_log("pio%u sm%u: program model '%s' is not implemented", pio->index, sm, prog->emu_model);
+    }
+    return 0;
+}
 void pio_sm_set_enabled(PIO pio, uint sm, bool en) { s_pio_en[pio->index][sm] = en; }
 void pio_sm_put(PIO pio, uint sm, uint32_t data) {
     emu_pio_sm_device_t *d = s_pio_dev[pio->index][sm];
     if (d && s_pio_en[pio->index][sm] && d->put) d->put(d, data);
 }
+void pio_sm_put_blocking(PIO pio, uint sm, uint32_t data) {
+    emu_pio_sm_device_t *d = s_pio_dev[pio->index][sm];
+    if (d && d->tx_level) {                  /* wait for FIFO space like hardware */
+        uint64_t give_up = emu_time_us() + 1000000u;
+        while (d->tx_level(d) >= 8 && s_pio_en[pio->index][sm] && emu_time_us() < give_up) emu_sleep_us(20);
+    }
+    pio_sm_put(pio, sm, data);
+}
+void pio_sm_clear_fifos(PIO pio, uint sm) {
+    emu_pio_sm_device_t *d = s_pio_dev[pio->index][sm];
+    if (d && d->reset) d->reset(d, true);
+}
+void pio_sm_restart(PIO pio, uint sm) {
+    emu_pio_sm_device_t *d = s_pio_dev[pio->index][sm];
+    if (d && d->reset) d->reset(d, false);
+}
+uint pio_sm_get_tx_fifo_level(PIO pio, uint sm) {
+    emu_pio_sm_device_t *d = s_pio_dev[pio->index][sm];
+    return d && d->tx_level ? d->tx_level(d) : 0;
+}
+bool pio_sm_is_tx_fifo_empty(PIO pio, uint sm) { return pio_sm_get_tx_fifo_level(pio, sm) == 0; }
+bool pio_sm_is_tx_fifo_full(PIO pio, uint sm) { return pio_sm_get_tx_fifo_level(pio, sm) >= 8; }
+
+/* ================================================================= PWM */
+static struct { uint16_t wrap, level[2]; bool en; } s_pwm[12];
+void pwm_set_wrap(uint sl, uint16_t w) { if (sl < 12) s_pwm[sl].wrap = w; }
+void pwm_set_gpio_level(uint g, uint16_t l) { uint sl = pwm_gpio_to_slice_num(g); if (sl < 12) s_pwm[sl].level[g & 1] = l; }
+void pwm_set_chan_level(uint sl, uint ch, uint16_t l) { if (sl < 12 && ch < 2) s_pwm[sl].level[ch] = l; }
+void pwm_set_enabled(uint sl, bool en) { if (sl < 12) s_pwm[sl].en = en; }
+void pwm_set_clkdiv(uint sl, float d) { (void)sl; (void)d; }
+void pwm_set_clkdiv_int_frac(uint sl, uint8_t i, uint8_t f) { (void)sl; (void)i; (void)f; }
+uint16_t emu_pwm_wrap(uint sl) { return sl < 12 ? s_pwm[sl].wrap : 0; }
+bool emu_pwm_enabled(uint sl) { return sl < 12 && s_pwm[sl].en; }
 
 /* ============================================================== clocks */
 static uint32_t s_clk[CLK_COUNT] = {

@@ -141,7 +141,7 @@ static void draw_lcd(void) {
     }
 }
 
-static void draw_dynamic(const uint32_t leds[EMU_NUM_LEDS], uint16_t held, uint32_t rails) {
+static void draw_dynamic(const uint32_t leds[EMU_NUM_LEDS], uint16_t held, uint32_t rails, int audio) {
     for (int i = 0; i < EMU_NUM_LEDS; i++) {
         int cx = 290 + i * 21, cy = 58;
         uint32_t c = leds[i];
@@ -155,6 +155,8 @@ static void draw_dynamic(const uint32_t leds[EMU_NUM_LEDS], uint16_t held, uint3
     for (unsigned z = 1; z <= 17 && n < (int)sizeof line - 16; z++)
         if (rails & (1u << (z - 1))) n += snprintf(line + n, sizeof line - (size_t)n, " %s", emu_zone_name(z));
     text(44, 470, 1, 0x7d8490, line);
+    static const char *const route[4] = { "", "AUDIO: SPEAKER", "AUDIO: 3.5MM JACK", "AUDIO: SPEAKER+JACK" };
+    if (audio & 3) text(W - 44 - text_w(route[audio & 3], 1), 470, 1, 0x4cc38a, route[audio & 3]);
 }
 
 void emu_skin_render(uint32_t *out) {
@@ -167,7 +169,7 @@ void emu_skin_render(uint32_t *out) {
     px = out;
     uint32_t leds[EMU_NUM_LEDS];
     emu_leds_get(leds);
-    draw_dynamic(leds, emu_pic_buttons(), emu_pic_rails());
+    draw_dynamic(leds, emu_pic_buttons(), emu_pic_rails(), emu_audio_status(NULL));
     draw_lcd();
 }
 
@@ -178,6 +180,7 @@ int emu_skin_frame(uint32_t *out) {
     static uint32_t p_leds[EMU_NUM_LEDS];
     static uint16_t p_held;
     static uint32_t p_rails;
+    static int p_audio;
     static int p_tx = -1, p_ty = -1;
     static bool p_touch, p_exit;
     uint32_t leds[EMU_NUM_LEDS];
@@ -187,10 +190,11 @@ int emu_skin_frame(uint32_t *out) {
     int tx, ty;
     bool touch = emu_touch_get(&tx, &ty);
     bool ex = emu_app_has_exited(NULL);
-    bool panel = first || memcmp(leds, p_leds, sizeof leds) || held != p_held || rails != p_rails;
+    int audio = emu_audio_status(NULL);
+    bool panel = first || memcmp(leds, p_leds, sizeof leds) || held != p_held || rails != p_rails || audio != p_audio;
     bool lcd = emu_lcd_changed() || touch != p_touch || (touch && (tx != p_tx || ty != p_ty)) || ex != p_exit;
     memcpy(p_leds, leds, sizeof leds);
-    p_held = held; p_rails = rails; p_touch = touch; p_tx = tx; p_ty = ty; p_exit = ex;
+    p_held = held; p_rails = rails; p_audio = audio; p_touch = touch; p_tx = tx; p_ty = ty; p_exit = ex;
     first = false;
     if (panel) { emu_skin_render(out); return 2; }
     if (lcd) { px = out; draw_lcd(); return 1; }

@@ -48,6 +48,7 @@ static uint64_t      s_last_frame_us;
 static uint64_t      s_run_limit_us;
 static const char   *s_exit_shot;
 static int           s_scale = 1;
+static bool          s_mute;
 
 static SDL_Window   *s_win;
 static SDL_Renderer *s_ren;
@@ -245,6 +246,7 @@ void emu_poll(void) {
     s_last_service_us = now;
 
     emu_touch_task();
+    emu_audio_task();
     emu_pic_task();
     emu_rtt_task();
     emu_script_task();
@@ -338,6 +340,9 @@ static void usage(void) {
         "  --rtt               serve RTT on 127.0.0.1:9090 (DIAG) and :9091 (agentio)\n"
         "  --rails HEX         power zones already on at launch (default 0x8183)\n"
         "  --scale N           window scale factor (default 1)\n"
+        "  --audio-out WAV     record everything the codec plays\n"
+        "  --mic-wav WAV       sound reaching the microphones (looped)\n"
+        "  --mute              don't play audio through the PC\n"
         "  --sensor NAME=V     set a sensor: temp=24 rh=45 lux=320 accel=0,0,1\n"
         "                      gyro=0,0,0 mag=22,5,-40 tilt=PITCH,ROLL noise=1\n"
         "  -v                  verbose model logging\n");
@@ -360,6 +365,9 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--sensor") && i + 1 < argc) {
             if (!emu_sensor_set_str(argv[++i])) { fprintf(stderr, "bad --sensor %s\n", argv[i]); return 1; }
         }
+        else if (!strcmp(a, "--audio-out") && i + 1 < argc) emu_audio_set_wav_out(argv[++i]);
+        else if (!strcmp(a, "--mic-wav") && i + 1 < argc) emu_audio_set_mic_wav(argv[++i]);
+        else if (!strcmp(a, "--mute")) s_mute = true;
         else if (!strcmp(a, "-v")) emu_verbose = 1;
         else if (!strcmp(a, "-vv")) emu_verbose = 2;
         else if (!strcmp(a, "-h") || !strcmp(a, "--help")) { usage(); return 0; }
@@ -381,9 +389,12 @@ int main(int argc, char **argv) {
     emu_leds_init();
     emu_ioexp_init();
     emu_sensors_init();
+    emu_audio_init();
     emu_pic_init(rails);
     emu_rtt_init(s_rtt_tcp);
 
+    atexit(emu_audio_finish);
+    emu_audio_enable_host(!s_headless && !s_mute);
     s_skin = (uint32_t *)calloc((size_t)EMU_SKIN_W * EMU_SKIN_H, sizeof(uint32_t));
     if (!s_headless) window_open();
     if (script) emu_script_load(script);

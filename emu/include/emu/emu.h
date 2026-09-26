@@ -65,16 +65,26 @@ void emu_uart_attach(unsigned uart, emu_uart_device_t *dev);
 void emu_uart_to_mcu(unsigned uart, const uint8_t *b, size_t n); /* device -> MCU RX */
 
 /* ----------------------------------------------------------------- dma */
-void emu_dma_uart_rx_deliver(unsigned uart, const uint8_t *b, size_t n, size_t *taken);
-void emu_irq_raise(unsigned irq);
+void   emu_dma_uart_rx_deliver(unsigned uart, const uint8_t *b, size_t n, size_t *taken);
+size_t emu_dma_dreq_pull(unsigned dreq, uint32_t *out, size_t max);   /* TX: memory -> device */
+size_t emu_dma_dreq_push(unsigned dreq, const uint32_t *in, size_t n); /* RX: device -> memory */
+bool   emu_dma_dreq_active(unsigned dreq);
+void   emu_irq_raise(unsigned irq);
 
 /* ----------------------------------------------------------------- pio */
+struct pio_hw;
 typedef struct emu_pio_sm_device {
     const char *name;
-    void (*put)(struct emu_pio_sm_device *d, uint32_t word);
+    void     (*put)(struct emu_pio_sm_device *d, uint32_t word);   /* CPU write to TX FIFO */
+    unsigned (*tx_level)(struct emu_pio_sm_device *d);             /* words queued         */
+    void     (*reset)(struct emu_pio_sm_device *d, bool clear_fifos);
     void *ctx;
 } emu_pio_sm_device_t;
+typedef void (*emu_pio_model_bind_fn)(struct pio_hw *pio, unsigned sm);
 void emu_pio_bind(unsigned pio_index, unsigned sm, emu_pio_sm_device_t *dev);
+void emu_pio_model_register(const char *program_name, emu_pio_model_bind_fn bind);
+emu_pio_sm_device_t *emu_pio_device(unsigned pio_index, unsigned sm);
+bool emu_pio_sm_enabled(unsigned pio_index, unsigned sm);
 
 /* --------------------------------------------------------- device models */
 /* LCD (ST7796-class, 480x320) */
@@ -116,6 +126,17 @@ void emu_sensors_init(void);
 bool emu_sensor_set(const char *name, int n, const float *v);
 bool emu_sensor_set_str(const char *spec);          /* "lux=300" "accel=0,0,1" */
 void emu_sensor_describe(char *out, size_t cap);
+
+/* Audio: NAU88C10 codec, I2S program model, host output, mic sources */
+void  emu_audio_init(void);
+void  emu_audio_task(void);
+void  emu_audio_finish(void);                       /* close --audio-out WAV */
+void  emu_audio_enable_host(bool on);               /* play through the PC's speakers */
+void  emu_audio_set_wav_out(const char *path);
+void  emu_audio_set_mic_wav(const char *path);      /* external sound reaching the mics */
+void  emu_audio_set_mic_level(float gain);
+float emu_audio_scene_sample(double fs, float speaker_bleed);
+int   emu_audio_status(float *level);               /* bit0 speaker, bit1 jack */
 
 /* SEGGER RTT back end */
 void emu_rtt_init(bool tcp);

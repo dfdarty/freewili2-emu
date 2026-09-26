@@ -10,7 +10,7 @@ fail=0
 for s in tests/scripts/*.txt; do
     app=$(basename "$s" .txt)
     [ -x "build/bin/$app" ] || { echo "skip $app (not built)"; continue; }
-    if timeout 60 "build/bin/$app" --headless --script "$s" > "out/$app.log" 2>&1; then
+    if timeout 60 "build/bin/$app" --headless --script "$s" --audio-out "out/$app.wav" > "out/$app.log" 2>&1; then
         echo "ok   $app"
     else
         echo "FAIL $app (see out/$app.log)"; fail=1
