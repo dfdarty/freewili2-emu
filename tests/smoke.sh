@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Build natively and run every app headless with its script. Screenshots land
-# in out/. A tests/scripts/<app>.expect file lists regexes the log must
+# Build natively and run every app headless with its script: tests/scripts/<app>.txt
+# for WiliBSP's apps, and apps/<app>/test.txt for your own (so an app joins the
+# run without touching tests/). The run fails if the app exits non-zero, e.g.
+# when a script `expect` times out. Screenshots land in out/.
+# An .expect file next to the script (tests/scripts/<app>.expect or
+# apps/<app>/test.expect) lists regexes the log must
 # match (one per line; a line starting with ! is a regex it must NOT match, and
 # "@sd PATH REGEX" checks a file the app left on its SD card).
 # Each app gets a fresh SD card folder, out/sdcard-<app>. Exit status is
@@ -15,13 +19,19 @@ cmake -S . -B "$build" -G Ninja ${CMAKE_ARGS:-} >/dev/null
 cmake --build "$build"
 mkdir -p out
 fail=0
-for s in tests/scripts/*.txt; do
-    app=$(basename "$s" .txt)
+for s in tests/scripts/*.txt apps/*/test.txt; do
+    [ -f "$s" ] || continue
+    if [[ "$s" == apps/* ]]; then
+        app=$(basename "$(dirname "$s")")
+        exp="${s%.txt}.expect"
+    else
+        app=$(basename "$s" .txt)
+        exp="tests/scripts/$app.expect"
+    fi
     [ -x "$build/bin/$app" ] || { echo "skip $app (not built)"; continue; }
     rm -rf "out/sdcard-$app"
     if timeout 60 "$build/bin/$app" --headless --script "$s" --audio-out "out/$app.wav" \
             --sdcard "out/sdcard-$app" > "out/$app.log" 2>&1; then
-        exp="tests/scripts/$app.expect"
         if [ -f "$exp" ]; then
             while IFS= read -r re; do
                 [ -z "$re" ] || [[ "$re" == \#* ]] && continue
@@ -38,6 +48,7 @@ for s in tests/scripts/*.txt; do
         echo "ok   $app"
     else
         echo "FAIL $app (see out/$app.log)"; fail=1
+        grep -m1 -- "FAIL script" "out/$app.log" | sed 's/^/     /' || true
     fi
 done
 exit $fail

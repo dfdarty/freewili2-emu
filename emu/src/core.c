@@ -28,6 +28,43 @@ EM_JS(char *, js_take_command, (void), {
     if (!q || !q.length) return 0;
     return stringToNewUTF8(q.shift());
 });
+/* F2 in the browser: offer the PNG the emulator just wrote as a download.
+ * The emulator's own PNG encoder is dependency-free and stores the pixels
+ * uncompressed, so the browser re-encodes it (compressed) when it can. */
+EM_JS(void, js_download_png, (const char *cname), {
+    const name = UTF8ToString(cname);
+    const data = FS.readFile(name);
+    FS.unlink(name);
+    const save = blob => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    };
+    const raw = new Blob([data], { type: 'image/png' });
+    if (typeof document === 'undefined') return;
+    if (typeof createImageBitmap !== 'function') { save(raw); return; }
+    createImageBitmap(raw).then(bmp => {
+        const c = document.createElement('canvas');
+        c.width = bmp.width; c.height = bmp.height;
+        c.getContext('2d').drawImage(bmp, 0, 0);
+        c.toBlob(b => save(b || raw), 'image/png');
+    }).catch(() => save(raw));
+});
+/* Under Node (FW2_EMU_WEB_ENV=web,node) give the emulator the host's files,
+ * so --script, --sdcard and screenshots use real paths as natively. */
+EM_JS(void, js_mount_host_fs, (void), {
+    if (typeof process === 'undefined' || !process.versions || !process.versions.node) return;
+    if (typeof NODEFS === 'undefined') return;
+    try {
+        FS.mkdir('/host');
+        FS.mount(NODEFS, { root: '/' }, '/host');
+        FS.chdir('/host' + process.cwd());
+    } catch (e) { err('[emu] could not mount the host file system: ' + e); }
+});
 #else
 #include <unistd.h>
 #endif
@@ -52,6 +89,7 @@ extern const unsigned char fw2app_uf2_info[];
 int emu_verbose = 0;
 
 static bool          s_headless;
+static bool          s_automated;     /* --run-ms, --script or --shot-on-exit: the run ends the process */
 static bool          s_rtt_tcp;
 static bool          s_in_poll;
 static bool          s_app_exited;
@@ -90,12 +128,13 @@ static void os_sleep_us(uint64_t us) {
 
 /* ------------------------------------------------------------------- log */
 void emu_log(const char *fmt, ...) {
+    char line[1024];
     va_list ap;
     va_start(ap, fmt);
-    fputs("[emu] ", stderr);
-    vfprintf(stderr, fmt, ap);
-    fputc('\n', stderr);
+    vsnprintf(line, sizeof line, fmt, ap);
     va_end(ap);
+    fprintf(stderr, "[emu] %s\n", line);
+    emu_script_line(line);
 }
 
 void emu_fatal(const char *fmt, ...) {
@@ -197,7 +236,13 @@ static void window_events(void) {
             if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_F2) {
                 char name[64];
                 snprintf(name, sizeof name, "fw2emu-%llu.png", (unsigned long long)(emu_time_us() / 1000));
+#ifdef __EMSCRIPTEN__
+                /* In the browser the file would land in the page's in-memory
+                 * FS; hand it to the user as a download instead. */
+                if (emu_screenshot(name, true) == 0) { js_download_png(name); emu_log("screenshot downloaded as %s", name); }
+#else
                 if (emu_screenshot(name, true) == 0) emu_log("screenshot -> %s", name);
+#endif
                 break;
             }
             int b = key_to_btn(e.key.keysym.sym);
@@ -242,7 +287,24 @@ static void window_present(void) {
 }
 
 static void window_open(void) {
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) emu_fatal("SDL_Init: %s", SDL_GetError());
+    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+#ifdef __EMSCRIPTEN__
+        emu_fatal("SDL_Init: %s", SDL_GetError());
+#else
+        emu_log("no window (SDL: %s): running headless", SDL_GetError());
+        s_headless = true;
+        return;
+#endif
+    }
+#ifndef __EMSCRIPTEN__
+    const char *drv = SDL_GetCurrentVideoDriver();
+    if (drv && (!strcmp(drv, "offscreen") || !strcmp(drv, "dummy"))) {
+        SDL_Quit();
+        emu_log("no display (SDL picked its '%s' video driver): running headless", drv);
+        s_headless = true;
+        return;
+    }
+#endif
     s_win = SDL_CreateWindow("FREE-WILi 2 emulator", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                              EMU_SKIN_W * s_scale, EMU_SKIN_H * s_scale, 0);
     if (!s_win) emu_fatal("SDL_CreateWindow: %s", SDL_GetError());
@@ -258,7 +320,8 @@ static void window_open(void) {
 static void window_events(void) {}
 static void window_present(void) {}
 static void window_open(void) {
-    emu_fatal("this emulator was built without SDL (FW2_EMU_SDL=OFF); run it with --headless");
+    emu_log("this emulator was built without SDL (FW2_EMU_SDL=OFF): running headless");
+    s_headless = true;
 }
 #endif
 
@@ -281,7 +344,7 @@ void emu_poll(void) {
 
     if (s_run_limit_us && now >= s_run_limit_us) {
         s_in_poll = false;
-        emu_app_exit("run time limit reached");
+        emu_run_end("run time limit reached", 0);
     }
 
     if (!s_headless && now - s_last_frame_us >= 16667u) {
@@ -330,17 +393,32 @@ void tight_loop_contents(void) {
 }
 
 /* ------------------------------------------------------------- app exit */
-void emu_app_exit(const char *why) {
+static void finish(const char *why, int status) __attribute__((noreturn));
+static void finish(const char *why, int status) {
     s_app_exited = true;
     s_exit_reason = why;
-    emu_log("app exited: %s", why);
     if (s_exit_shot) emu_screenshot(s_exit_shot, false);
-    if (s_headless) {
-        fflush(stdout);
-        exit(0);
-    }
+    fflush(stdout);
+    fflush(stderr);
+    exit(status);
+}
+
+/* The run itself is over (--run-ms, script `quit`, a failed `expect`): end
+ * the process, window or not. */
+void emu_run_end(const char *why, int status) {
+    emu_log("%s: %s", status ? "run failed" : "run ended", why);
+    finish(why, status);
+}
+
+/* The app ended (main returned, panic, watchdog reboot / HOME recovery). */
+void emu_app_exit(const char *why) {
+    emu_log("app exited: %s", why);
+    if (s_headless || s_automated) finish(why, 0);
     /* On hardware the loader takes over; here the window stays up so the
      * last frame can be inspected. */
+    s_app_exited = true;
+    s_exit_reason = why;
+    emu_log("the window stays open to show the last frame; close it to quit");
     for (;;) {
         window_events();
         window_present();
@@ -377,11 +455,17 @@ static void usage(void) {
         "  --sensor NAME=V     set a sensor or sound: temp=24 lux=320 tilt=30,0 tone=1000,8000 mics=1,1,0,1\n"
         "                      gyro=0,0,0 mag=22,5,-40 tilt=PITCH,ROLL noise=1\n"
         "                      header inputs gpio12=1 (-1 releases), vrefext=3.3 (volts on Trig_IN/VREF)\n"
-        "  -v                  verbose model logging\n");
+        "  -v, -vv             verbose model logging (-vv: also every sleep and SD request)\n"
+        "Without a display (DISPLAY / WAYLAND_DISPLAY unset) the emulator runs headless.\n"
+        "--run-ms, --script and --shot-on-exit runs end the process when they finish\n"
+        "(exit status 1 if a script `expect` failed).\n");
 }
 
 int main(int argc, char **argv) {
     s_start_ns = mono_ns();
+#ifdef __EMSCRIPTEN__
+    js_mount_host_fs();
+#endif
     uint32_t rails = 0x8183u;   /* sensors, display, USB hub, status LED, debug probe */
     const char *script = NULL;
     const char *sdcard = NULL;
@@ -396,7 +480,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--rails") && i + 1 < argc) rails = (uint32_t)strtoul(argv[++i], NULL, 16);
         else if (!strcmp(a, "--scale") && i + 1 < argc) s_scale = atoi(argv[++i]) > 0 ? atoi(argv[i]) : 1;
         else if (!strcmp(a, "--sensor") && i + 1 < argc) {
-            if (!emu_sensor_set_str(argv[++i])) { fprintf(stderr, "bad --sensor %s\n", argv[i]); return 1; }
+            if (!emu_sensor_set_str(argv[++i])) { fprintf(stderr, "bad --sensor %s\n", argv[i]); return 2; }
         }
         else if (!strcmp(a, "--audio-out") && i + 1 < argc) emu_audio_set_wav_out(argv[++i]);
         else if (!strcmp(a, "--mic-wav") && i + 1 < argc) emu_audio_set_mic_wav(argv[++i]);
@@ -405,8 +489,20 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "-v")) emu_verbose = 1;
         else if (!strcmp(a, "-vv")) emu_verbose = 2;
         else if (!strcmp(a, "-h") || !strcmp(a, "--help")) { usage(); return 0; }
-        else { usage(); return 1; }
+        else { usage(); return 2; }
     }
+
+    s_automated = s_run_limit_us || script || s_exit_shot;
+#if defined(__linux__) && !defined(__EMSCRIPTEN__)
+    if (!s_headless) {
+        const char *x = getenv("DISPLAY"), *w = getenv("WAYLAND_DISPLAY");
+        if ((!x || !*x) && (!w || !*w)) {
+            s_headless = true;
+            emu_log("no display (DISPLAY and WAYLAND_DISPLAY are unset): running headless%s",
+                    s_automated ? "" : " -- stop it with Ctrl+C, or use --run-ms / --script");
+        }
+    }
+#endif
 
     const fw2app_uf2_info_t *info = (const fw2app_uf2_info_t *)(const void *)fw2app_uf2_info;
     emu_log("FREE-WILi 2 emulator — app \"%.*s\" v%03u: %.*s",
@@ -430,9 +526,9 @@ int main(int argc, char **argv) {
     emu_rtt_init(s_rtt_tcp);
 
     atexit(emu_audio_finish);
-    emu_audio_enable_host(!s_headless && !s_mute);
     s_skin = (uint32_t *)calloc((size_t)EMU_SKIN_W * EMU_SKIN_H, sizeof(uint32_t));
-    if (!s_headless) window_open();
+    if (!s_headless) window_open();              /* may fall back to headless */
+    emu_audio_enable_host(!s_headless && !s_mute);
     if (script) emu_script_load(script);
 
     int rc = fw2_emu_app_main();

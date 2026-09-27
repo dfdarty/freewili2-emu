@@ -19,7 +19,9 @@ void     emu_poll(void);             /* cheap; call from any wait/spin path */
 void     emu_sleep_us(uint64_t us);  /* sleep while servicing the emulator  */
 void     emu_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 void     emu_fatal(const char *fmt, ...) __attribute__((noreturn, format(printf, 1, 2)));
-void     emu_app_exit(const char *why) __attribute__((noreturn));
+void     emu_app_exit(const char *why) __attribute__((noreturn));      /* the app ended itself */
+void     emu_run_end(const char *why, int status) __attribute__((noreturn)); /* the run is over */
+void     emu_script_line(const char *line);   /* every DIAG / log line, for script `expect` */
 extern int emu_verbose;
 
 /* ---------------------------------------------------------------- gpio */

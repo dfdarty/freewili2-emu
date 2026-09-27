@@ -88,6 +88,7 @@
         <dt><kbd>1</kbd>–<kbd>5</kbd></dt><dd>grey · yellow · green · blue · red</dd>
         <dt>click / drag</dt><dd>touch the screen, or press a key on the panel</dd>
         <dt>hold <kbd>H</kbd> 5 s</dt><dd>exit the app (WiliBSP recovery)</dd>
+        <dt><kbd>F2</kbd></dt><dd>download a PNG of the whole panel</dd>
       </dl>
     </div>
     <div class="card">
@@ -174,67 +175,106 @@
   // ---- sensor sliders -> emulator commands (script syntax, see docs/scripting.md)
   Module.fw2Commands = [];
   const send = cmd => Module.fw2Commands.push(cmd);
-  const S = { temp: 24, rh: 45, lux: 320, pitch: 0, roll: 0, heading: 0 };
+
+  // Start from the emulator's own defaults (emu/src/dev_sensors.c, dev_pdm.c)
+  // and from any --sensor NAME=V,V in ?args=, so the page shows what the model holds.
+  const S = { temp: 24, rh: 45, lux: 320, accel: [0, 0, 1], mag: [22, 5, -40], noise: false };
+  const R = { hz: 1000, amp: 0, D: 1, B: 1, A: 1, C: 1 };
+  const P = { vrefext: -1, pins: {} };
+  const args = window.Module.arguments;
+  for (let i = 0; i < args.length; i++) {
+    const spec = args[i] === '--sensor' ? args[++i] : (args[i].startsWith('--sensor=') ? args[i].slice(9) : null);
+    if (!spec || !spec.includes('=')) continue;
+    const [name, vals] = [spec.slice(0, spec.indexOf('=')).toLowerCase(), spec.slice(spec.indexOf('=') + 1)];
+    const v = vals.split(',').map(Number);
+    if (v.some(Number.isNaN)) continue;
+    if (name === 'temp') S.temp = v[0];
+    else if (name === 'rh' || name === 'humidity') S.rh = v[0];
+    else if (name === 'lux') S.lux = Math.max(0, v[0]);
+    else if (name === 'accel' && v.length >= 3) S.accel = v.slice(0, 3);
+    else if (name === 'tilt') {
+      const p = (v[0] || 0) * Math.PI / 180, r = (v[1] || 0) * Math.PI / 180;
+      S.accel = [-Math.sin(p), Math.sin(r) * Math.cos(p), Math.cos(r) * Math.cos(p)];
+    }
+    else if (name === 'mag' && v.length >= 3) S.mag = v.slice(0, 3);
+    else if (name === 'noise') S.noise = v[0] !== 0;
+    else if (name === 'tone') { R.hz = v[0]; R.amp = v[0] > 0 ? (v.length > 1 ? v[1] : 8000) : 0; }
+    else if (name === 'mics' && v.length >= 4) [R.A, R.B, R.C, R.D] = v;
+    else if (/^mic\.[a-d]$/.test(name)) R[name[4].toUpperCase()] = v[0];
+    else if (name === 'vrefext') P.vrefext = v[0];
+    else if (/^gpio\d+$/.test(name)) P.pins[Number(name.slice(4))] = v[0] < 0 ? -1 : v[0] ? 1 : 0;
+  }
+  const deg = r => r * 180 / Math.PI;
+  const tilt = () => {                         // inverse of the emulator's `tilt`
+    const [x, y, z] = S.accel, n = Math.hypot(x, y, z) || 1;
+    return { pitch: Math.round(deg(Math.asin(Math.max(-1, Math.min(1, -x / n))))),
+             roll: Math.round(deg(Math.atan2(y, z))) };
+  };
+  const V = {                                  // what each slider shows / sets
+    temp: { get: () => S.temp, set: v => { S.temp = v; send(`set temp ${v}`); } },
+    rh: { get: () => S.rh, set: v => { S.rh = v; send(`set rh ${v}`); } },
+    lux: { get: () => S.lux, set: v => { S.lux = v; send(`set lux ${v}`); } },
+    pitch: { get: () => tilt().pitch, set: v => { const t = tilt(); setTilt(v, t.roll); } },
+    roll: { get: () => tilt().roll, set: v => { const t = tilt(); setTilt(t.pitch, v); } },
+    heading: { get: () => (Math.round(deg(Math.atan2(-S.mag[1], S.mag[0]))) + 360) % 360,
+               set: v => {                     // keep the field's strength and dip, turn it
+                 const h = v * Math.PI / 180, H = Math.hypot(S.mag[0], S.mag[1]);
+                 S.mag = [H * Math.cos(h), -H * Math.sin(h), S.mag[2]];
+                 send(`set mag ${S.mag.map(m => m.toFixed(2)).join(' ')}`);
+               } },
+  };
+  function setTilt(p, r) {
+    const pr = p * Math.PI / 180, rr = r * Math.PI / 180;
+    S.accel = [-Math.sin(pr), Math.sin(rr) * Math.cos(pr), Math.cos(rr) * Math.cos(pr)];
+    send(`set tilt ${p} ${r}`);
+  }
   const defs = [
     ['temp', 'Temp °C', -20, 60, 0.5, v => v.toFixed(1)],
     ['rh', 'Humidity %', 0, 100, 1, v => v.toFixed(0)],
-    ['lux', 'Light lux', 0, 4.5, 0.01, v => Math.round(10 ** v - 1).toString(), v => Math.log10(v + 1)],
+    ['lux', 'Light lux', 0, 4.5, 0.01, v => Math.round(v).toString(), v => Math.log10(v + 1), v => Math.round(10 ** v - 1)],
     ['pitch', 'Pitch °', -90, 90, 1, v => v.toFixed(0)],
     ['roll', 'Roll °', -180, 180, 1, v => v.toFixed(0)],
     ['heading', 'Heading °', 0, 359, 1, v => v.toFixed(0)],
   ];
   const box = document.getElementById('sensors');
-  function apply(key) {
-    if (key === 'temp') send(`set temp ${S.temp}`);
-    else if (key === 'rh') send(`set rh ${S.rh}`);
-    else if (key === 'lux') send(`set lux ${S.lux}`);
-    else if (key === 'pitch' || key === 'roll') send(`set tilt ${S.pitch} ${S.roll}`);
-    else if (key === 'heading') {               // ~Florida field: 26 uT horizontal, 38 uT down
-      const h = S.heading * Math.PI / 180;
-      send(`set mag ${(26 * Math.cos(h)).toFixed(2)} ${(-26 * Math.sin(h)).toFixed(2)} -38`);
-    }
-  }
-  for (const [key, name, min, max, step, fmt, toSlider] of defs) {
+  for (const [key, name, min, max, step, fmt, toSlider, fromSlider] of defs) {
     const id = `s_${key}`;
     const lab = document.createElement('label'); lab.htmlFor = id; lab.textContent = name;
     const inp = Object.assign(document.createElement('input'), { type: 'range', id, min, max, step });
-    inp.value = toSlider ? toSlider(S[key]) : S[key];
-    const out = document.createElement('output'); out.textContent = fmt(Number(inp.value));
+    inp.value = toSlider ? toSlider(V[key].get()) : V[key].get();
+    const out = Object.assign(document.createElement('output'), { id: `o_${key}` });
+    out.textContent = fmt(V[key].get());       // the model's value, not the slider's rounding
     inp.addEventListener('input', () => {
-      const v = Number(inp.value);
-      S[key] = key === 'lux' ? Math.round(10 ** v - 1) : v;
-      out.textContent = fmt(v);
-      apply(key);
+      const v = fromSlider ? fromSlider(Number(inp.value)) : Number(inp.value);
+      V[key].set(v);
+      out.textContent = fmt(V[key].get());
     });
     box.append(lab, inp, out);
   }
   const nl = document.createElement('label'); nl.textContent = 'Noise';
-  const nb = Object.assign(document.createElement('input'), { type: 'checkbox' });
+  const nb = Object.assign(document.createElement('input'), { type: 'checkbox', checked: S.noise });
   nb.addEventListener('change', () => send(`set noise ${nb.checked ? 1 : 0}`));
   box.append(nl, nb, document.createElement('span'));
-  apply('heading');
 
   // ---- room sound: a test tone and per-mic pickup (mics listed left to right)
-  const R = { hz: 1000, amp: 0, D: 1, B: 1, A: 1, C: 1 };
   const sbox = document.getElementById('sound');
   const soundDefs = [
-    ['hz', 'Tone Hz', 1.7, 3.9, 0.01, v => Math.round(10 ** v).toString(), v => Math.log10(v)],
+    ['hz', 'Tone Hz', 1.7, 3.9, 0.01, v => Math.round(v).toString(), v => Math.log10(v), v => Math.round(10 ** v)],
     ['amp', 'Tone level', 0, 16000, 100, v => v ? v.toFixed(0) : 'off'],
     ['D', 'Mic D (left)', 0, 1, 0.05, v => v.toFixed(2)],
     ['B', 'Mic B', 0, 1, 0.05, v => v.toFixed(2)],
     ['A', 'Mic A', 0, 1, 0.05, v => v.toFixed(2)],
     ['C', 'Mic C (right)', 0, 1, 0.05, v => v.toFixed(2)],
   ];
-  for (const [key, name, min, max, step, fmt, toSlider] of soundDefs) {
+  for (const [key, name, min, max, step, fmt, toSlider, fromSlider] of soundDefs) {
     const id = `r_${key}`;
     const lab = document.createElement('label'); lab.htmlFor = id; lab.textContent = name;
     const inp = Object.assign(document.createElement('input'), { type: 'range', id, min, max, step });
     inp.value = toSlider ? toSlider(R[key]) : R[key];
-    const out = document.createElement('output'); out.textContent = fmt(Number(inp.value));
+    const out = document.createElement('output'); out.textContent = fmt(R[key]);
     inp.addEventListener('input', () => {
-      const v = Number(inp.value);
-      R[key] = key === 'hz' ? Math.round(10 ** v) : v;
-      out.textContent = fmt(v);
+      R[key] = fromSlider ? fromSlider(Number(inp.value)) : Number(inp.value);
+      out.textContent = fmt(R[key]);
       if (key === 'hz' || key === 'amp') send(`set tone ${R.hz} ${R.amp}`);
       else send(`set mic.${key} ${R[key]}`);
     });
@@ -243,19 +283,22 @@
 
   // ---- MAIN-CPU header pins driven from outside (read by ow_io_gpio_read_all)
   const pbox = document.getElementById('pins');
+  const pinLabel = st => st === -1 ? 'not driven' : st ? 'driven high' : 'driven low';
   for (const g of [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 25, 26, 27]) {
-    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: String(g),
-                                                                title: `GPIO ${g}: not driven` });
-    let st = -1;
+    let st = g in P.pins ? P.pins[g] : -1;
+    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: String(g), id: `gpio${g}` });
+    const show = () => { b.className = st === 1 ? 'hi' : st === 0 ? 'lo' : ''; b.title = `GPIO ${g}: ${pinLabel(st)}`; };
+    show();
     b.addEventListener('click', () => {
       st = st === -1 ? 1 : st === 1 ? 0 : -1;
-      b.className = st === 1 ? 'hi' : st === 0 ? 'lo' : '';
-      b.title = `GPIO ${g}: ${st === -1 ? 'not driven' : st ? 'driven high' : 'driven low'}`;
+      show();
       send(`set gpio${g} ${st}`);
     });
     pbox.append(b);
   }
-  document.getElementById('vrefext').addEventListener('change', e => send(`set vrefext ${e.target.value}`));
+  const vsel = document.getElementById('vrefext');
+  if ([...vsel.options].some(o => Number(o.value) === P.vrefext)) vsel.value = [...vsel.options].find(o => Number(o.value) === P.vrefext).value;
+  vsel.addEventListener('change', e => send(`set vrefext ${e.target.value}`));
 
   const s = document.createElement('script');
   s.src = `${current.name}.js`;

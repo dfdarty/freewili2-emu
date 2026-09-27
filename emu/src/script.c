@@ -10,15 +10,22 @@
  *   set NAME V [V V]         sensors: temp rh lux accel gyro mag tilt noise
  *   log TEXT
  *   header                   log the MAIN-CPU GPIO header state (pins, VIO, Vout)
+ *   expect REGEX [MS]        wait (default 2000 ms) for a DIAG / log line matching the
+ *                            POSIX extended REGEX ("quoted" if it has spaces); on a
+ *                            timeout the run ends at once with exit status 1
  *   quit
  * Buttons: GREY YELLOW GREEN BLUE RED CENTER UP DOWN LEFT RIGHT HOME OK CANCEL PAGE
  */
 #include "emu/emu.h"
 
 #include <ctype.h>
+#include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef FW2_EMU_HAVE_ZLIB
+#include <zlib.h>
+#endif
 
 bool emu_touch_get(int *x, int *y);
 
@@ -29,6 +36,40 @@ static bool    s_active;
 static uint64_t s_resume_us;
 static struct { bool on; int btn; uint64_t until; } s_press;
 static struct { bool on; uint64_t start, until; int x1, y1, x2, y2; } s_touch;
+
+/* ------------------------------------------------ output lines for expect */
+/* Every DIAG line and emulator log line (without its [diag]/[emu] prefix)
+ * since the run started. `expect` consumes them like pexpect: it looks at
+ * lines after the one its previous match was on, so output printed before
+ * the `expect` line was reached still counts. */
+#define NLINES   512
+#define LINE_MAX_LEN 320
+static char     s_out[NLINES][LINE_MAX_LEN];
+static uint64_t s_out_count;             /* lines captured so far */
+static uint64_t s_cursor;                /* first line the next expect examines */
+static struct {
+    bool     on;
+    regex_t  re;
+    char     src[256];
+    uint64_t deadline;
+    int      line, timeout_ms;
+} s_expect;
+
+void emu_script_line(const char *line) {
+    snprintf(s_out[s_out_count % NLINES], LINE_MAX_LEN, "%s", line);
+    s_out_count++;
+}
+
+/* True when a line since the cursor matches; the cursor moves past it. */
+static bool expect_scan(void) {
+    if (s_out_count - s_cursor > NLINES) s_cursor = s_out_count - NLINES;
+    for (; s_cursor < s_out_count; s_cursor++)
+        if (regexec(&s_expect.re, s_out[s_cursor % NLINES], 0, NULL, 0) == 0) {
+            s_cursor++;
+            return true;
+        }
+    return false;
+}
 
 void emu_script_load(const char *path) {
     FILE *f = fopen(path, "r");
@@ -61,9 +102,54 @@ static int need_btn(const char *name, int line) {
     return b;
 }
 
+/* expect "REGEX with spaces" [MS]  |  expect REGEX [MS] */
+static void exec_expect(const char *args, uint64_t now, int ln) {
+    while (*args == ' ' || *args == '\t') args++;
+    char re[256];
+    size_t n = 0;
+    if (*args == '"') {
+        args++;
+        while (*args && *args != '"' && n < sizeof re - 1) {
+            if (*args == '\\' && args[1] == '"') args++;      /* \" inside quotes */
+            re[n++] = *args++;
+        }
+        if (*args != '"') emu_fatal("script line %d: expect: missing closing quote", ln + 1);
+        args++;
+    } else {
+        while (*args && *args != ' ' && *args != '\t' && n < sizeof re - 1) re[n++] = *args++;
+    }
+    re[n] = 0;
+    if (!n) emu_fatal("script line %d: expect REGEX [TIMEOUT_MS]", ln + 1);
+    while (*args == ' ' || *args == '\t') args++;
+    int ms = 2000;
+    if (*args) {
+        char *end;
+        long v = strtol(args, &end, 10);
+        while (*end == ' ' || *end == '\t') end++;
+        if (*end || v <= 0) emu_fatal("script line %d: expect: bad timeout '%s'", ln + 1, args);
+        ms = (int)v;
+    }
+    if (s_expect.src[0]) regfree(&s_expect.re);
+    int rc = regcomp(&s_expect.re, re, REG_EXTENDED | REG_NOSUB);
+    if (rc) {
+        char msg[128];
+        regerror(rc, &s_expect.re, msg, sizeof msg);
+        emu_fatal("script line %d: expect: bad regex /%s/: %s", ln + 1, re, msg);
+    }
+    snprintf(s_expect.src, sizeof s_expect.src, "%s", re);
+    s_expect.on = true;
+    s_expect.line = ln + 1;
+    s_expect.timeout_ms = ms;
+    s_expect.deadline = now + (uint64_t)ms * 1000u;
+}
+
 static void exec(char *line, uint64_t now) {
     char raw[512];
     snprintf(raw, sizeof raw, "%s", line);
+    if (!strncmp(line, "expect", 6) && (line[6] == ' ' || line[6] == '\t' || !line[6])) {
+        exec_expect(line + 6, now, s_pc - 1);
+        return;
+    }
     char *save = NULL;
     char *cmd = strtok_r(line, " \t", &save);
     char *a1 = strtok_r(NULL, " \t", &save);
@@ -127,7 +213,7 @@ static void exec(char *line, uint64_t now) {
                           pins[i].pwm ? "(pwm)" : pins[i].output ? "(out)" : pins[i].ext ? "(ext)" : "");
         emu_log("script: header %s", line);
     } else if (!strcmp(cmd, "quit")) {
-        emu_app_exit("script quit");
+        emu_run_end("script quit", 0);
     } else {
         emu_fatal("script line %d: unknown command '%s'", ln + 1, cmd);
     }
@@ -162,7 +248,19 @@ void emu_script_task(void) {
                           s_touch.y1 + (int)((s_touch.y2 - s_touch.y1) * t), true);
         }
     }
-    while (s_active && now >= s_resume_us && !s_press.on && !s_touch.on) {
+    if (s_expect.on) {
+        if (expect_scan()) {
+            s_expect.on = false;
+            if (emu_verbose) emu_log("script: expect /%s/ matched", s_expect.src);
+        } else if (now >= s_expect.deadline) {
+            char why[400];
+            snprintf(why, sizeof why, "script line %d: expect /%s/ -- no matching line within %d ms",
+                     s_expect.line, s_expect.src, s_expect.timeout_ms);
+            emu_log("FAIL %s", why);
+            emu_run_end(why, 1);
+        }
+    }
+    while (s_active && now >= s_resume_us && !s_press.on && !s_touch.on && !s_expect.on) {
         if (s_pc >= s_nlines) { s_active = false; break; }
         char buf[512];
         snprintf(buf, sizeof buf, "%s", s_lines[s_pc++]);
@@ -197,7 +295,10 @@ static void chunk(FILE *f, const char *type, const uint8_t *data, size_t n) {
     fwrite(t, 1, 4, f);
 }
 
-/* Uncompressed (stored-deflate) PNG: small code, no dependencies. */
+/* PNG with zlib when the build found it (FW2_EMU_HAVE_ZLIB), otherwise
+ * stored (uncompressed) deflate blocks: larger files, no dependency. */
+static size_t zlib_stored(const uint8_t *raw, size_t raw_len, uint8_t **out);
+
 static int write_png(const char *path, const uint32_t *argb, int w, int h) {
     if (!crc_table[1]) crc_init();
     size_t raw_len = (size_t)h * (1 + (size_t)w * 3);
@@ -210,6 +311,32 @@ static int write_png(const char *path, const uint32_t *argb, int w, int h) {
             raw[k++] = (uint8_t)(p >> 16); raw[k++] = (uint8_t)(p >> 8); raw[k++] = (uint8_t)p;
         }
     }
+    uint8_t *z = NULL;
+    size_t o = 0;
+#ifdef FW2_EMU_HAVE_ZLIB
+    uLongf zl = compressBound((uLong)raw_len);
+    z = (uint8_t *)malloc(zl);
+    if (z && compress2(z, &zl, raw, (uLong)raw_len, 6) == Z_OK) o = zl;
+    else { free(z); z = NULL; }
+#endif
+    if (!z) o = zlib_stored(raw, raw_len, &z);
+    FILE *f = fopen(path, "wb");
+    if (!f) { free(raw); free(z); emu_log("screenshot: cannot write %s", path); return -1; }
+    static const uint8_t sig[8] = { 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n' };
+    fwrite(sig, 1, 8, f);
+    uint8_t ihdr[13];
+    be32(ihdr, (uint32_t)w); be32(ihdr + 4, (uint32_t)h);
+    ihdr[8] = 8; ihdr[9] = 2; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+    chunk(f, "IHDR", ihdr, 13);
+    chunk(f, "IDAT", z, o);
+    chunk(f, "IEND", NULL, 0);
+    fclose(f);
+    free(raw);
+    free(z);
+    return 0;
+}
+
+static size_t zlib_stored(const uint8_t *raw, size_t raw_len, uint8_t **out) {
     size_t nblk = (raw_len + 65534) / 65535;
     size_t z_len = 2 + raw_len + nblk * 5 + 4;
     uint8_t *z = (uint8_t *)malloc(z_len);
@@ -227,20 +354,8 @@ static int write_png(const char *path, const uint32_t *argb, int w, int h) {
     }
     be32(z + o, (b << 16) | a);
     o += 4;
-    FILE *f = fopen(path, "wb");
-    if (!f) { free(raw); free(z); emu_log("screenshot: cannot write %s", path); return -1; }
-    static const uint8_t sig[8] = { 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n' };
-    fwrite(sig, 1, 8, f);
-    uint8_t ihdr[13];
-    be32(ihdr, (uint32_t)w); be32(ihdr + 4, (uint32_t)h);
-    ihdr[8] = 8; ihdr[9] = 2; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
-    chunk(f, "IHDR", ihdr, 13);
-    chunk(f, "IDAT", z, o);
-    chunk(f, "IEND", NULL, 0);
-    fclose(f);
-    free(raw);
-    free(z);
-    return 0;
+    *out = z;
+    return o;
 }
 
 int emu_screenshot(const char *path, bool full_device) {

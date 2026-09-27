@@ -119,7 +119,11 @@ static void draw_static(void) {
     for (int i = 0; i < EMU_NUM_LEDS; i++) circle(290 + i * 21, 58, 7, 0x15171b);
     rrect(LCD_X - 10, LCD_Y - 10, EMU_LCD_W + 20, EMU_LCD_H + 20, 8, 0x0a0b0d);
     for (int i = 0; i < NKEYS; i++) draw_key(&KEYS[i], false);
+#ifdef __EMSCRIPTEN__
+    text(44, 484, 1, 0x5d636d, "KEYS: ARROWS+ENTER DPAD  H O C P  1-5 CONTEXT  F2 DOWNLOAD PNG");
+#else
     text(44, 484, 1, 0x5d636d, "KEYS: ARROWS+ENTER DPAD  H O C P  1-5 CONTEXT  F2 SCREENSHOT");
+#endif
 }
 
 static void draw_lcd(void) {

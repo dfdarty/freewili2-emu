@@ -157,6 +157,32 @@ endif()
 
 include(cmake/fw2_emu_app.cmake)
 
+# Compressed PNG screenshots when zlib is available for this build (not on
+# the web: the page re-encodes downloads itself, and Emscripten's zlib port
+# would be one more download at first build). Without it, screenshots are
+# valid but uncompressed PNGs.
+if(NOT EMSCRIPTEN)
+    find_package(ZLIB QUIET)
+    if(ZLIB_FOUND)
+        include(CheckCSourceCompiles)
+        set(CMAKE_REQUIRED_LIBRARIES ZLIB::ZLIB)
+        if(FW2_EMU_32BIT)
+            set(CMAKE_REQUIRED_FLAGS "-m32")
+        endif()
+        check_c_source_compiles("#include <zlib.h>
+            int main(void) { return compressBound(1) == 0; }" FW2_EMU_ZLIB_LINKS)
+        unset(CMAKE_REQUIRED_LIBRARIES)
+        unset(CMAKE_REQUIRED_FLAGS)
+        if(FW2_EMU_ZLIB_LINKS)
+            target_compile_definitions(freewili2_bsp PRIVATE FW2_EMU_HAVE_ZLIB=1)
+            target_link_libraries(freewili2_bsp PUBLIC ZLIB::ZLIB)
+        endif()
+    endif()
+    if(NOT FW2_EMU_ZLIB_LINKS)
+        message(STATUS "zlib not found for this build: screenshots will be uncompressed PNGs")
+    endif()
+endif()
+
 # Pico SDK library names that WiliBSP code links against. On the host they are
 # all provided by the shim inside freewili2_bsp.
 foreach(_lib pico_stdlib hardware_uart hardware_gpio hardware_adc hardware_i2c
@@ -199,13 +225,15 @@ foreach(_app IN LISTS FW2_EMU_UPSTREAM_APPS)
     add_subdirectory("${WILIBSP_DIR}/apps/${_app}" "${CMAKE_BINARY_DIR}/wilibsp/${_app}")
 endforeach()
 
+# An app folder counts once it has a CMakeLists.txt. The glob is on those
+# files with CONFIGURE_DEPENDS, so `cmake --build` notices a new app (or a
+# CMakeLists.txt added to a folder made earlier) and re-configures by itself.
 option(FW2_EMU_LOCAL_APPS "Build every app in apps/" ON)
 if(FW2_EMU_LOCAL_APPS)
-    file(GLOB _local_apps LIST_DIRECTORIES true "${CMAKE_CURRENT_SOURCE_DIR}/apps/*")
-    foreach(_dir IN LISTS _local_apps)
-        if(IS_DIRECTORY "${_dir}" AND EXISTS "${_dir}/CMakeLists.txt")
-            add_subdirectory("${_dir}")
-        endif()
+    file(GLOB _local_apps CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/apps/*/CMakeLists.txt")
+    foreach(_lists IN LISTS _local_apps)
+        get_filename_component(_dir "${_lists}" DIRECTORY)
+        add_subdirectory("${_dir}")
     endforeach()
 endif()
 
@@ -217,11 +245,10 @@ else()
 endif()
 option(FW2_EMU_TEST_APPS "Build the self-test apps in tests/apps/" ${_test_apps_default})
 if(FW2_EMU_TEST_APPS)
-    file(GLOB _test_apps LIST_DIRECTORIES true "${CMAKE_CURRENT_SOURCE_DIR}/tests/apps/*")
-    foreach(_dir IN LISTS _test_apps)
-        if(IS_DIRECTORY "${_dir}" AND EXISTS "${_dir}/CMakeLists.txt")
-            add_subdirectory("${_dir}")
-        endif()
+    file(GLOB _test_apps CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tests/apps/*/CMakeLists.txt")
+    foreach(_lists IN LISTS _test_apps)
+        get_filename_component(_dir "${_lists}" DIRECTORY)
+        add_subdirectory("${_dir}")
     endforeach()
 endif()
 

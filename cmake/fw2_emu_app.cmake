@@ -81,6 +81,10 @@ function(fw2_display_app target)
             "-sENVIRONMENT=${FW2_EMU_WEB_ENV}"
             "-sEXPORTED_RUNTIME_METHODS=callMain"
             "-sINVOKE_RUN=1")
+        if(FW2_EMU_WEB_ENV MATCHES "node")
+            # Under Node the emulator mounts the host's files (--script, --sdcard, screenshots).
+            target_link_options(${target} PRIVATE "-lnodefs.js")
+        endif()
     endif()
 endfunction()
 

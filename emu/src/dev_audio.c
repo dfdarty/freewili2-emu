@@ -187,6 +187,7 @@ static void le32(uint8_t *p, uint32_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v
 
 void emu_audio_finish(void) {
     if (!OUT.wav) return;
+    if (!OUT.wav_rate) OUT.wav_rate = 16000;         /* nothing played: a valid, empty WAV at a nominal rate */
     uint8_t h[44];
     memcpy(h, "RIFF", 4); le32(h + 4, 36 + OUT.wav_frames * 2);
     memcpy(h + 8, "WAVEfmt ", 8); le32(h + 16, 16);

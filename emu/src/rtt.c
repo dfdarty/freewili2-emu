@@ -38,6 +38,12 @@ typedef struct {
 
 static chan_t s_ch[NCH];
 static bool   s_tcp;
+/* Channel 1 exists only once the app has called agentio_init(), which
+ * configures its RTT buffers. Until then a client on :9091 gets nothing
+ * back, so it is told so and disconnected instead of left waiting. */
+static bool   s_agentio_ready;
+static int    s_reject = -1;             /* a :9091 client being turned away */
+static uint64_t s_reject_until;
 static char   s_line[512];
 static size_t s_line_len;
 
@@ -50,9 +56,12 @@ static int listen_on(uint16_t port) {
     struct sockaddr_in a = { .sin_family = AF_INET, .sin_port = htons(port) };
     a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     if (bind(s, (struct sockaddr *)&a, sizeof a) < 0 || listen(s, 1) < 0) {
-        emu_log("rtt: cannot listen on 127.0.0.1:%u (%s)", port, strerror(errno));
+        int e = errno;
         close(s);
-        return -1;
+        if (e == EADDRINUSE)
+            emu_fatal("rtt: port %u on 127.0.0.1 is already in use -- probably another emulator started with "
+                      "--rtt (or OpenOCD / fw rtt). Stop it, or run this one without --rtt", port);
+        emu_fatal("rtt: cannot listen on 127.0.0.1:%u (%s)", port, strerror(e));
     }
     fcntl(s, F_SETFL, fcntl(s, F_GETFL) | O_NONBLOCK);
     return s;
@@ -87,10 +96,34 @@ static void queue_out(unsigned ch, const void *p, size_t n) {
 void emu_rtt_task(void) {
 #ifdef RTT_TCP
     if (!s_tcp) return;
+    if (s_reject >= 0) {
+        char junk[256];
+        ssize_t r = recv(s_reject, junk, sizeof junk, 0);
+        if (r == 0 || (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK) || emu_time_us() > s_reject_until) {
+            close(s_reject);
+            s_reject = -1;
+        }
+    }
     for (int i = 0; i < NCH; i++) {
         chan_t *c = &s_ch[i];
         if (c->lsock >= 0 && c->csock < 0) {
             int s = accept(c->lsock, NULL, NULL);
+            if (s >= 0 && i == 1 && !s_agentio_ready) {
+                static bool said;
+                if (!said || emu_verbose)
+                    emu_log("rtt: agentio client connected, but the app never called agentio_init() -- "
+                            "closing it (see docs/wilibsp-tools.md)");
+                said = true;
+                /* Close gracefully: EOF first, then drain what the client
+                 * already sent, so it reads "connection closed" rather than
+                 * a reset. */
+                if (s_reject >= 0) close(s_reject);
+                shutdown(s, SHUT_WR);
+                fcntl(s, F_SETFL, fcntl(s, F_GETFL) | O_NONBLOCK);
+                s_reject = s;
+                s_reject_until = emu_time_us() + 1000000u;
+                s = -1;
+            }
             if (s >= 0) {
                 fcntl(s, F_SETFL, fcntl(s, F_GETFL) | O_NONBLOCK);
                 int one = 1;
@@ -122,6 +155,7 @@ static void stdout_diag(const char *p, unsigned n) {
         if (ch == '\n' || s_line_len == sizeof s_line - 1) {
             s_line[s_line_len] = 0;
             fprintf(stdout, "[diag] %s\n", s_line);
+            emu_script_line(s_line);
             fflush(stdout);
             s_line_len = 0;
             if (ch == '\n') continue;
@@ -131,8 +165,16 @@ static void stdout_diag(const char *p, unsigned n) {
 }
 
 void SEGGER_RTT_Init(void) {}
-int SEGGER_RTT_ConfigUpBuffer(unsigned i, const char *n, void *b, unsigned s, unsigned f) { (void)i; (void)n; (void)b; (void)s; (void)f; return 0; }
-int SEGGER_RTT_ConfigDownBuffer(unsigned i, const char *n, void *b, unsigned s, unsigned f) { (void)i; (void)n; (void)b; (void)s; (void)f; return 0; }
+int SEGGER_RTT_ConfigUpBuffer(unsigned i, const char *n, void *b, unsigned s, unsigned f) {
+    (void)n; (void)b; (void)s; (void)f;
+    if (i == 1) s_agentio_ready = true;
+    return 0;
+}
+int SEGGER_RTT_ConfigDownBuffer(unsigned i, const char *n, void *b, unsigned s, unsigned f) {
+    (void)n; (void)b; (void)s; (void)f;
+    if (i == 1) s_agentio_ready = true;
+    return 0;
+}
 int SEGGER_RTT_SetFlagsUpBuffer(unsigned i, unsigned f) { (void)i; (void)f; return 0; }
 
 unsigned SEGGER_RTT_Write(unsigned i, const void *p, unsigned n) {
