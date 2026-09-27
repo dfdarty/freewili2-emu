@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
@@ -42,8 +43,16 @@ static bool   s_tcp;
  * configures its RTT buffers. Until then a client on :9091 gets nothing
  * back, so it is told so and disconnected instead of left waiting. */
 static bool   s_agentio_ready;
+#ifdef RTT_TCP
+/* :9091 clients that arrive while the app is still starting wait in the
+ * listen queue and are served as soon as the app calls agentio_init(). If
+ * it hasn't within AGENTIO_GRACE_US of the first client, clients are turned
+ * away (gracefully: EOF, then their request is drained). */
+#define AGENTIO_GRACE_US 5000000u
+static uint64_t s_grace_end;             /* set when the first client shows up */
 static int    s_reject = -1;             /* a :9091 client being turned away */
 static uint64_t s_reject_until;
+#endif
 static char   s_line[512];
 static size_t s_line_len;
 
@@ -107,11 +116,18 @@ void emu_rtt_task(void) {
     for (int i = 0; i < NCH; i++) {
         chan_t *c = &s_ch[i];
         if (c->lsock >= 0 && c->csock < 0) {
+            if (i == 1 && !s_agentio_ready) {
+                struct pollfd pf = { .fd = c->lsock, .events = POLLIN };
+                if (poll(&pf, 1, 0) <= 0) continue;                       /* nobody waiting */
+                uint64_t now = emu_time_us();
+                if (!s_grace_end) s_grace_end = now + AGENTIO_GRACE_US;
+                if (now < s_grace_end) continue;                          /* give the app time */
+            }
             int s = accept(c->lsock, NULL, NULL);
             if (s >= 0 && i == 1 && !s_agentio_ready) {
                 static bool said;
                 if (!said || emu_verbose)
-                    emu_log("rtt: agentio client connected, but the app never called agentio_init() -- "
+                    emu_log("rtt: agentio client connected, but the app hasn't called agentio_init() -- "
                             "closing it (see docs/wilibsp-tools.md)");
                 said = true;
                 /* Close gracefully: EOF first, then drain what the client

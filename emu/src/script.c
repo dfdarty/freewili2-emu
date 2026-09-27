@@ -19,7 +19,9 @@
 #include "emu/emu.h"
 
 #include <ctype.h>
+#include <errno.h>
 #include <regex.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -71,6 +73,8 @@ static bool expect_scan(void) {
     return false;
 }
 
+static void strip_comment(char *p);
+
 void emu_script_load(const char *path) {
     FILE *f = fopen(path, "r");
     if (!f) emu_fatal("cannot open script %s", path);
@@ -78,9 +82,8 @@ void emu_script_load(const char *path) {
     while (fgets(buf, sizeof buf, f) && s_nlines < MAX_LINES) {
         char *p = buf;
         while (isspace((unsigned char)*p)) p++;
-        char *e = p + strlen(p);
-        while (e > p && isspace((unsigned char)e[-1])) *--e = 0;
-        if (!*p || *p == '#') continue;
+        strip_comment(p);
+        if (!*p) continue;
         s_lines[s_nlines++] = strdup(p);
     }
     fclose(f);
@@ -143,80 +146,134 @@ static void exec_expect(const char *args, uint64_t now, int ln) {
     s_expect.deadline = now + (uint64_t)ms * 1000u;
 }
 
+/* Strict argument parsing: a token that isn't a number is an error, not 0. */
+static long need_int(const char *t, const char *cmd, int ln) {
+    char *end;
+    long v = t ? strtol(t, &end, 10) : 0;
+    if (!t || end == t || *end) emu_fatal("script line %d: %s: '%s' is not a whole number", ln + 1, cmd, t ? t : "");
+    return v;
+}
+
+static float need_float(const char *t, const char *cmd, int ln) {
+    char *end;
+    float v = t ? strtof(t, &end) : 0;
+    if (!t || end == t || *end) emu_fatal("script line %d: %s: '%s' is not a number", ln + 1, cmd, t ? t : "");
+    return v;
+}
+
+static long opt_ms(const char *t, long dflt, const char *cmd, int ln) {
+    long v = t ? need_int(t, cmd, ln) : dflt;
+    if (v < 0) emu_fatal("script line %d: %s: negative time %ld", ln + 1, cmd, v);
+    return v;
+}
+
 static void exec(char *line, uint64_t now) {
     char raw[512];
     snprintf(raw, sizeof raw, "%s", line);
+    int ln = s_pc - 1;
     if (!strncmp(line, "expect", 6) && (line[6] == ' ' || line[6] == '\t' || !line[6])) {
-        exec_expect(line + 6, now, s_pc - 1);
+        exec_expect(line + 6, now, ln);
         return;
     }
-    char *save = NULL;
-    char *cmd = strtok_r(line, " \t", &save);
-    char *a1 = strtok_r(NULL, " \t", &save);
-    char *a2 = strtok_r(NULL, " \t", &save);
-    char *a3 = strtok_r(NULL, " \t", &save);
-    char *a4 = strtok_r(NULL, " \t", &save);
-    char *a5 = strtok_r(NULL, " \t", &save);
-    int ln = s_pc - 1;
+    char *save = NULL, *t[8] = { 0 };
+    int n = 0;
+    for (char *tok = strtok_r(line, " \t", &save); tok; tok = strtok_r(NULL, " \t", &save)) {
+        if (n == 8) emu_fatal("script line %d: too many arguments", ln + 1);
+        t[n++] = tok;
+    }
+    if (!n) return;
+    const char *cmd = t[0];
+    int nargs = n - 1;
+#define ARGS(lo, hi, usage) \
+    do { if (nargs < (lo) || nargs > (hi)) emu_fatal("script line %d: usage: %s", ln + 1, usage); } while (0)
     if (!strcmp(cmd, "wait")) {
-        s_resume_us = now + (uint64_t)atoll(a1 ? a1 : "0") * 1000u;
+        ARGS(1, 1, "wait MS");
+        s_resume_us = now + (uint64_t)opt_ms(t[1], 0, cmd, ln) * 1000u;
     } else if (!strcmp(cmd, "press")) {
-        int b = need_btn(a1, ln);
+        ARGS(1, 2, "press BTN [MS]");
+        int b = need_btn(t[1], ln);
+        long ms = opt_ms(t[2], 150, cmd, ln);
         set_btn(b, true);
         s_press.on = true; s_press.btn = b;
-        s_press.until = now + (uint64_t)(a2 ? atoi(a2) : 150) * 1000u;
+        s_press.until = now + (uint64_t)ms * 1000u;
         s_resume_us = s_press.until + 50000u;
-    } else if (!strcmp(cmd, "hold")) {
-        set_btn(need_btn(a1, ln), true);
-    } else if (!strcmp(cmd, "release")) {
-        set_btn(need_btn(a1, ln), false);
+    } else if (!strcmp(cmd, "hold") || !strcmp(cmd, "release")) {
+        ARGS(1, 1, "hold BTN / release BTN");
+        set_btn(need_btn(t[1], ln), cmd[0] == 'h');
     } else if (!strcmp(cmd, "touch")) {
-        if (!a1 || !a2) emu_fatal("script line %d: touch X Y [MS]", ln + 1);
+        ARGS(2, 3, "touch X Y [MS]");
+        s_touch.x1 = s_touch.x2 = (int)need_int(t[1], cmd, ln);
+        s_touch.y1 = s_touch.y2 = (int)need_int(t[2], cmd, ln);
+        long ms = opt_ms(t[3], 120, cmd, ln);
         s_touch.on = true;
-        s_touch.x1 = s_touch.x2 = atoi(a1);
-        s_touch.y1 = s_touch.y2 = atoi(a2);
         s_touch.start = now;
-        s_touch.until = now + (uint64_t)(a3 ? atoi(a3) : 120) * 1000u;
+        s_touch.until = now + (uint64_t)ms * 1000u;
         emu_touch_set(s_touch.x1, s_touch.y1, true);
         s_resume_us = s_touch.until + 50000u;
     } else if (!strcmp(cmd, "drag")) {
-        if (!a4) emu_fatal("script line %d: drag X1 Y1 X2 Y2 [MS]", ln + 1);
+        ARGS(4, 5, "drag X1 Y1 X2 Y2 [MS]");
+        s_touch.x1 = (int)need_int(t[1], cmd, ln); s_touch.y1 = (int)need_int(t[2], cmd, ln);
+        s_touch.x2 = (int)need_int(t[3], cmd, ln); s_touch.y2 = (int)need_int(t[4], cmd, ln);
+        long ms = opt_ms(t[5], 300, cmd, ln);
         s_touch.on = true;
-        s_touch.x1 = atoi(a1); s_touch.y1 = atoi(a2);
-        s_touch.x2 = atoi(a3); s_touch.y2 = atoi(a4);
         s_touch.start = now;
-        s_touch.until = now + (uint64_t)(a5 ? atoi(a5) : 300) * 1000u;
+        s_touch.until = now + (uint64_t)ms * 1000u;
         emu_touch_set(s_touch.x1, s_touch.y1, true);
         s_resume_us = s_touch.until + 50000u;
     } else if (!strcmp(cmd, "screenshot")) {
-        if (!a1) emu_fatal("script line %d: screenshot FILE [lcd|device]", ln + 1);
-        bool dev = a2 && !strcmp(a2, "device");
-        if (emu_screenshot(a1, dev) == 0) emu_log("script: screenshot -> %s", a1);
+        ARGS(1, 2, "screenshot FILE [lcd|device]");
+        if (t[2] && strcmp(t[2], "lcd") && strcmp(t[2], "device"))
+            emu_fatal("script line %d: screenshot: '%s' is not lcd or device", ln + 1, t[2]);
+        bool dev = t[2] && !strcmp(t[2], "device");
+        if (emu_screenshot(t[1], dev) != 0) {
+            char why[600];
+            snprintf(why, sizeof why, "script line %d: screenshot %s could not be written", ln + 1, t[1]);
+            emu_log("FAIL %s", why);
+            emu_run_end(why, 1);
+        }
+        emu_log("script: screenshot -> %s", t[1]);
     } else if (!strcmp(cmd, "set")) {
+        ARGS(2, 5, "set NAME V [V V V]");
         float v[4];
-        int n = 0;
-        char *vals[4] = { a2, a3, a4, a5 };
-        for (int i = 0; i < 4 && vals[i]; i++) v[n++] = strtof(vals[i], NULL);
-        if (!a1 || !emu_sensor_set(a1, n, v)) emu_fatal("script line %d: set NAME V [V V V] (temp rh lux accel gyro mag tilt noise mics mic.A-D tone miclevel)", ln + 1);
+        for (int i = 0; i < nargs - 1; i++) v[i] = need_float(t[2 + i], cmd, ln);
+        if (!emu_sensor_set(t[1], nargs - 1, v))
+            emu_fatal("script line %d: set NAME V [V V V] (temp rh lux accel gyro mag tilt noise mics mic.A-D "
+                      "tone miclevel gpioN vrefext)", ln + 1);
         if (emu_verbose) { char d[160]; emu_sensor_describe(d, sizeof d); emu_log("sensors: %s", d); }
     } else if (!strcmp(cmd, "log")) {
         const char *rest = raw + 3;
         while (*rest == ' ' || *rest == '\t') rest++;
         emu_log("script: %s", rest);
     } else if (!strcmp(cmd, "header")) {
+        ARGS(0, 0, "header");
         emu_header_pin_t pins[EMU_HEADER_PINS];
-        char line[400];
-        int n = snprintf(line, sizeof line, "VIO %.2f V, Vout %.2f V;", emu_main_vio(), emu_main_vout());
+        char out[400];
+        int k = snprintf(out, sizeof out, "VIO %.2f V, Vout %.2f V;", emu_main_vio(), emu_main_vout());
         emu_main_header(pins);
-        for (int i = 0; i < EMU_HEADER_PINS && n < (int)sizeof line - 16; i++)
-            n += snprintf(line + n, sizeof line - (size_t)n, " %u=%d%s", (unsigned)pins[i].gpio, pins[i].level,
+        for (int i = 0; i < EMU_HEADER_PINS && k < (int)sizeof out - 16; i++)
+            k += snprintf(out + k, sizeof out - (size_t)k, " %u=%d%s", (unsigned)pins[i].gpio, pins[i].level,
                           pins[i].pwm ? "(pwm)" : pins[i].output ? "(out)" : pins[i].ext ? "(ext)" : "");
-        emu_log("script: header %s", line);
+        emu_log("script: header %s", out);
     } else if (!strcmp(cmd, "quit")) {
+        ARGS(0, 0, "quit");
         emu_run_end("script quit", 0);
     } else {
         emu_fatal("script line %d: unknown command '%s'", ln + 1, cmd);
     }
+#undef ARGS
+}
+
+/* Remove a '#' comment that is not inside double quotes, then trailing
+ * blanks. Used for script files and for commands from the web page. */
+static void strip_comment(char *p) {
+    bool quoted = false;
+    for (char *c = p; *c; c++) {
+        if (*c == '\\' && quoted && c[1]) { c++; continue; }
+        if (*c == '"') quoted = !quoted;
+        else if (*c == '#' && !quoted) { *c = 0; break; }
+    }
+    char *e = p + strlen(p);
+    while (e > p && isspace((unsigned char)e[-1])) *--e = 0;
 }
 
 /* Immediate command from outside the script timeline (e.g. the web page).
@@ -227,6 +284,7 @@ bool emu_script_exec_line(const char *line) {
     snprintf(buf, sizeof buf, "%s", line);
     char *p = buf;
     while (*p == ' ') p++;
+    strip_comment(p);
     if (!*p || !strncmp(p, "wait", 4) || !strncmp(p, "quit", 4)) return false;
     static const char *const ok[] = { "press", "hold", "release", "touch", "drag", "set", "log", "screenshot", "header" };
     bool known = false;
@@ -299,6 +357,14 @@ static void chunk(FILE *f, const char *type, const uint8_t *data, size_t n) {
  * stored (uncompressed) deflate blocks: larger files, no dependency. */
 static size_t zlib_stored(const uint8_t *raw, size_t raw_len, uint8_t **out);
 
+/* Create the folders a file path needs (like `mkdir -p "$(dirname PATH)"`). */
+void emu_make_parents(const char *path) {
+    char d[1024];
+    snprintf(d, sizeof d, "%s", path);
+    for (char *c = d + 1; *c; c++)
+        if (*c == '/') { *c = 0; mkdir(d, 0777); *c = '/'; }
+}
+
 static int write_png(const char *path, const uint32_t *argb, int w, int h) {
     if (!crc_table[1]) crc_init();
     size_t raw_len = (size_t)h * (1 + (size_t)w * 3);
@@ -320,8 +386,9 @@ static int write_png(const char *path, const uint32_t *argb, int w, int h) {
     else { free(z); z = NULL; }
 #endif
     if (!z) o = zlib_stored(raw, raw_len, &z);
+    emu_make_parents(path);
     FILE *f = fopen(path, "wb");
-    if (!f) { free(raw); free(z); emu_log("screenshot: cannot write %s", path); return -1; }
+    if (!f) { emu_log("screenshot: cannot write %s (%s)", path, strerror(errno)); free(raw); free(z); return -1; }
     static const uint8_t sig[8] = { 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n' };
     fwrite(sig, 1, 8, f);
     uint8_t ihdr[13];
@@ -330,9 +397,11 @@ static int write_png(const char *path, const uint32_t *argb, int w, int h) {
     chunk(f, "IHDR", ihdr, 13);
     chunk(f, "IDAT", z, o);
     chunk(f, "IEND", NULL, 0);
-    fclose(f);
+    bool ok = !ferror(f);
+    if (fclose(f) != 0) ok = false;
     free(raw);
     free(z);
+    if (!ok) { emu_log("screenshot: writing %s failed", path); return -1; }
     return 0;
 }
 

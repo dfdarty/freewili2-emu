@@ -22,6 +22,7 @@ void     emu_fatal(const char *fmt, ...) __attribute__((noreturn, format(printf,
 void     emu_app_exit(const char *why) __attribute__((noreturn));      /* the app ended itself */
 void     emu_run_end(const char *why, int status) __attribute__((noreturn)); /* the run is over */
 void     emu_script_line(const char *line);   /* every DIAG / log line, for script `expect` */
+void     emu_make_parents(const char *path);  /* mkdir -p for an output file's folder */
 extern int emu_verbose;
 
 /* ---------------------------------------------------------------- gpio */

@@ -1,0 +1,3 @@
+# sd_example: the SD-card example from docs/main-link.md.
+expect "sd_example: done" 10000
+quit

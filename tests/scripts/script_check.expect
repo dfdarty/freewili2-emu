@@ -1,0 +1,3 @@
+script: screenshot -> out/script_check\.png$
+!the comment is not part
+!FATAL

@@ -175,6 +175,7 @@ static struct {
 } OUT;
 
 void emu_audio_set_wav_out(const char *path) {
+    emu_make_parents(path);
     OUT.wav = fopen(path, "wb");
     if (!OUT.wav) emu_fatal("audio: cannot write %s", path);
     static const uint8_t zero[44] = { 0 };

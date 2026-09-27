@@ -314,6 +314,10 @@ static void window_open(void) {
     s_tex = SDL_CreateTexture(s_ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
                               EMU_SKIN_W, EMU_SKIN_H);
     if (!s_tex) emu_fatal("SDL_CreateTexture: %s", SDL_GetError());
+#ifdef __EMSCRIPTEN__
+    /* SDL sets the page title to the window's; the page chose its own. */
+    EM_ASM({ if (Module.pageTitle) document.title = Module.pageTitle; });
+#endif
 }
 #else
 /* Built with FW2_EMU_SDL=OFF (e.g. the -m32 build): no window, no host audio. */
@@ -397,7 +401,10 @@ static void finish(const char *why, int status) __attribute__((noreturn));
 static void finish(const char *why, int status) {
     s_app_exited = true;
     s_exit_reason = why;
-    if (s_exit_shot) emu_screenshot(s_exit_shot, false);
+    if (s_exit_shot && emu_screenshot(s_exit_shot, false) != 0) {
+        emu_log("FAIL --shot-on-exit %s could not be written", s_exit_shot);
+        if (!status) status = 1;
+    }
     fflush(stdout);
     fflush(stderr);
     exit(status);
@@ -418,7 +425,11 @@ void emu_app_exit(const char *why) {
      * last frame can be inspected. */
     s_app_exited = true;
     s_exit_reason = why;
+#ifdef __EMSCRIPTEN__
+    emu_log("the app has exited; pick an app or press Restart");
+#else
     emu_log("the window stays open to show the last frame; close it to quit");
+#endif
     for (;;) {
         window_events();
         window_present();

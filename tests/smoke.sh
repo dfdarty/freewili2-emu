@@ -48,7 +48,8 @@ for s in tests/scripts/*.txt apps/*/test.txt; do
         echo "ok   $app"
     else
         echo "FAIL $app (see out/$app.log)"; fail=1
-        grep -m1 -- "FAIL script" "out/$app.log" | sed 's/^/     /' || true
+        # say why: a failed expect or screenshot, or a fatal script / option error
+        grep -m1 -E -- "FATAL|FAIL script|FAIL --shot" "out/$app.log" | sed 's/^/     /' || true
     fi
 done
 exit $fail

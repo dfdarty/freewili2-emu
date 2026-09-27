@@ -1,0 +1,4 @@
+sd_example: wrote 1744 bytes, read back 1744
+^\[diag\]   log\.csv 1744$
+!close failed
+@sd data/log.csv ^199,39601$

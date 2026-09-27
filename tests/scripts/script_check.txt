@@ -1,0 +1,24 @@
+# script_check: every command type with an inline comment. The app measures
+# what actually arrived, and expect checks it.
+wait 2500                 # board_init and the power-zone handshake
+expect "script_check: ready" 3000   # a comment after expect's timeout
+press OK 400              # a long press; must not turn into 0 ms
+expect "check: btn 11 held (3[5-9][0-9]|4[0-4][0-9]) ms"   # OK is button 11
+hold RED                  # RED is button 4 ...
+wait 300                  # ... held 300 ms ...
+release RED               # ... then let go
+expect "check: btn 4 held (2[5-9][0-9]|3[0-4][0-9]) ms"
+touch 240 160 300         # a 300 ms tap
+expect "check: touch held (2[5-9][0-9]|3[0-4][0-9]) ms from 240,160 to 240,160"
+drag 100 100 300 200 400  # a swipe
+expect "check: touch held (3[5-9][0-9]|4[0-4][0-9]) ms from 1[0-9][0-9],1[0-9][0-9] to (29[0-9]|300),(19[0-9]|200)"
+set temp 31.25            # a value followed by a comment
+expect "check: temp 3125 centi-C" 1500
+log marker one            # the comment is not part of the text
+expect "^script: marker one$"
+log "keep # this"         # a '#' inside double quotes stays
+expect "^script: \"keep # this\"$"
+header                    # the MAIN-CPU header probe
+expect "^script: header VIO"
+screenshot out/script_check.png device   # the file name ends before the comment
+quit                      # done

@@ -157,9 +157,9 @@ def find_toolchain(explicit=None, fetch=False):
         for sub in ("bin", ""):
             gcc = os.path.join(c, sub, "arm-none-eabi-gcc")
             if os.access(gcc, os.X_OK):
-                return os.path.dirname(gcc)
+                return os.path.abspath(os.path.dirname(gcc))
     if fetch:
-        return os.path.join(fetch_toolchain(), "bin")
+        return os.path.abspath(os.path.join(fetch_toolchain(), "bin"))
     gcc = shutil.which("arm-none-eabi-gcc")
     if gcc:
         return os.path.dirname(os.path.realpath(gcc))
@@ -209,10 +209,11 @@ def find_sdk(explicit=None, fetch=True):
     os.makedirs(CACHE, exist_ok=True)
     tmp = dest + ".partial"
     shutil.rmtree(tmp, ignore_errors=True)
-    if run(["git", "clone", "--quiet", "--depth", "1", "-b", PICO_SDK_VERSION,
+    quiet = ["-c", "advice.detachedHead=false"]           # a tag checkout is expected here
+    if run(["git"] + quiet + ["clone", "--quiet", "--depth", "1", "-b", PICO_SDK_VERSION,
             "https://github.com/raspberrypi/pico-sdk.git", tmp]).returncode:
         die("could not clone the Pico SDK")
-    if run(["git", "-C", tmp, "submodule", "update", "--init", "--depth", "1"]).returncode:
+    if run(["git"] + quiet + ["-C", tmp, "submodule", "update", "--init", "--depth", "1"]).returncode:
         die("could not fetch the Pico SDK submodules")
     os.rename(tmp, dest)
     return dest
@@ -474,12 +475,7 @@ def cmd_run(a):
         print("fw2emu: note: the -m32 build has no window unless configured with SDL; adding --headless",
               file=sys.stderr)
         args = ["--headless"] + args
-    if (sys.platform.startswith("linux") and "--headless" not in args
-            and not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY")):
-        print("fw2emu: note: no display here (e.g. a Codespace), so running --headless. Drive it with "
-              "--script / --rtt and save the screen with --shot-on-exit, or use `tools/fw2emu web APP_DIR`.",
-              file=sys.stderr)
-        args = ["--headless"] + args
+    # Without a display the emulator switches to headless by itself and says so.
     cmd = ["gdb", "-q", "-ex", "break fw2_emu_app_main", "--args", exe] + args if a.gdb else [exe] + args
     if a.gdb and not shutil.which("gdb"):
         die("gdb not found")
@@ -798,31 +794,43 @@ def _kb(n):
 
 
 def print_table(meta, results, verbose):
-    print(f"\nFREE-WILi 2 hardware check: Pico SDK {meta['pico_sdk']}, arm-none-eabi-gcc {meta['gcc']} (linked)"
-          f" (WiliBSP's pinned toolchain is {meta['wilibsp_pinned_toolchain']})\n")
-    hdr = (f"{'app':<17} {'image (loaded)':>24} {'SRAM (static)':>20} {'PSRAM (all)':>20} "
-           f"{'stack':>14} {'unknowns':>9}  status")
-    print(hdr)
-    print("-" * len(hdr))
+    note = ""
+    if not str(meta["gcc"]).startswith("14.2"):
+        note = f" (WiliBSP builds with Arm GNU Toolchain {meta['wilibsp_pinned_toolchain']})"
+    print(f"\nFREE-WILi 2 hardware check: Pico SDK {meta['pico_sdk']}, "
+          f"arm-none-eabi-gcc {meta['gcc']}{note}\n")
+    # One unit per column: sizes in KB, the stack in bytes.
+    head = ["app", "loads into", "image KB", "SRAM KB", "PSRAM KB", "stack B", "unknowns", "status"]
+    rows = []
     for r in results:
         if "memory" not in r:
-            print(f"{r['app']:<17} {'':>24} {'':>20} {'':>20} {'':>14} {'':>9}  BUILD FAILED")
+            rows.append([r["app"], "", "", "", "", "", "", "BUILD FAILED"])
             continue
         m, s = r["memory"], r["stack"]
-        img = m["image"]
-        img_s = (f"{img['region']} {img['extent'] / KB:6.1f}/{img['limit'] // KB} KB "
-                 f"{_pct(img['extent'], img['limit'])}")
-        ram_s = f"{m['ram']['used'] / KB:6.1f}/{m['ram']['limit'] // KB} KB {_pct(m['ram']['used'], m['ram']['limit'])}"
-        ps = m["psram"]["used"]
-        ps_s = f"{ps / KB:6.1f}/{m['psram']['limit'] // KB} KB {_pct(ps, m['psram']['limit'])}" if ps else "-"
-        b = r["stack_budget"]
-        lim = b["limit"]
-        st_s = f"{s['combined']}/{lim // KB} KB" if lim >= 16 * KB else f"{s['combined']}/{lim} B"
+        img, ram, ps = m["image"], m["ram"], m["psram"]
         unk = stackcheck.count_unknown(s["main"]["unknown"])
         for h in s["irq"]:
             unk += stackcheck.count_unknown(h["unknown"])
-        status = "KNOWN (upstream)" if r["status"] == "known" else r["status"].upper()
-        print(f"{r['app']:<17} {img_s:>24} {ram_s:>20} {ps_s:>20} {st_s:>14} {unk:>9}  {status}")
+        lim = r["stack_budget"]["limit"]
+        rows.append([
+            r["app"], img["region"],
+            f"{img['extent'] / KB:.1f} / {img['limit'] // KB} {_pct(img['extent'], img['limit'])}",
+            f"{ram['used'] / KB:.1f} / {ram['limit'] // KB} {_pct(ram['used'], ram['limit'])}",
+            f"{ps['used'] / KB:.1f} / {ps['limit'] // KB} {_pct(ps['used'], ps['limit'])}" if ps["used"] else "-",
+            f"{s['combined']} / {lim} {_pct(s['combined'], lim) if lim > 0 else ''}".rstrip(),
+            str(unk),
+            "KNOWN (upstream)" if r["status"] == "known" else r["status"].upper(),
+        ])
+    widths = [max(len(x[i]) for x in [head] + rows) for i in range(len(head))]
+    def line(cells):
+        out = [cells[0].ljust(widths[0]), cells[1].ljust(widths[1])]
+        out += [c.rjust(w) for c, w in zip(cells[2:7], widths[2:7])]
+        out.append(cells[7])
+        return "  ".join(out)
+    print(line(head))
+    print("-" * len(line(head)))
+    for row in rows:
+        print(line(row))
     print()
     for r in results:
         print(f"{r['app']}  ({r['dir']})")
@@ -903,6 +911,24 @@ def _print_messages(r):
         print(f"      {k['docs']}")
 
 
+def cmd_wait_rtt(a):
+    """Wait until an emulator started with --rtt is serving RTT."""
+    import socket
+    import time
+    end = time.monotonic() + a.timeout
+    while True:
+        try:
+            socket.create_connection(("127.0.0.1", 9090), timeout=0.5).close()
+            print("fw2emu: RTT is up on 127.0.0.1:9090 (DIAG) and :9091 (agentio)", file=sys.stderr)
+            return 0
+        except OSError:
+            if time.monotonic() >= end:
+                print(f"fw2emu: nothing is serving RTT on 127.0.0.1:9090 after {a.timeout:.0f} s "
+                      "(start the app with --rtt)", file=sys.stderr)
+                return 1
+            time.sleep(0.2)
+
+
 # --------------------------------------------------------------------- main
 
 
@@ -958,6 +984,13 @@ def main():
     h.add_argument("-o", "--output", metavar="FILE", help="also write the JSON report to FILE")
     h.add_argument("-v", "--verbose", action="store_true", help="list IRQ handlers and every unknown")
     h.set_defaults(func=cmd_hwcheck)
+
+    wr = sub.add_parser("wait-rtt", help="wait until an emulator started with --rtt serves RTT",
+                        description="Wait until an app started with --rtt (e.g. `fw2emu run APP --rtt &`, which "
+                                    "builds first) is serving RTT on 127.0.0.1:9090 and :9091, so WiliBSP's fw.py "
+                                    "can be used. Exits 0 when it is, 1 on timeout.")
+    wr.add_argument("--timeout", type=float, default=300, help="seconds to wait (default 300: covers a first build)")
+    wr.set_defaults(func=cmd_wait_rtt)
 
     a = ap.parse_args()
     sys.exit(a.func(a))
