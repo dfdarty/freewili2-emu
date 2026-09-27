@@ -136,22 +136,100 @@ void emu_spi_bus_read(unsigned bus, uint8_t tx, uint8_t *dst, size_t n) {
     else memset(dst, 0xFF, n);
 }
 
-uint spi_init(spi_inst_t *s, uint baud) { s->baud = baud; return baud; }
+/* ---- bus timing ----------------------------------------------------
+ * Each bus keeps the time its wire becomes free. A transfer starts when the
+ * bus is free (or now) and occupies it for bits / clock. Blocking calls let
+ * the CPU run up to BUS_SLACK_NS ahead of the wire before they sleep, so a
+ * stream of small writes costs a sleep every few hundred microseconds rather
+ * than a system call each, while the average rate matches the hardware. */
+bool emu_bus_timing = true;
+#define BUS_SLACK_NS 300000u
+
+typedef struct { uint64_t free_at_ns, busy_ns; } bus_clock_t;
+static bus_clock_t s_spi_clk[2], s_i2c_clk[2];
+
+/* The CPU sleeps only until the wire is BUS_SLACK_NS/2 from free, so the
+ * next transfer normally queues back to back. If a host sleep overshoots
+ * anyway, the next transfer may start that much in the past instead of
+ * leaving the bus idle: the app would have carried on the moment it could. */
+static uint64_t s_oversleep_ns;
+
+static uint64_t bus_occupy(bus_clock_t *b, uint64_t bits, uint32_t hz) {
+    if (!emu_bus_timing || !hz || !bits) return 0;
+    uint64_t dur = bits * 1000000000ull / hz;
+    uint64_t now = emu_time_ns();
+    uint64_t start = now;
+    if (b->free_at_ns >= now) start = b->free_at_ns;
+    else if (now - b->free_at_ns <= s_oversleep_ns + 20000u) start = b->free_at_ns;
+    s_oversleep_ns = 0;
+    b->free_at_ns = start + dur;
+    b->busy_ns += dur;
+    return b->free_at_ns;
+}
+
+static void cpu_wait_for(uint64_t until_ns) {
+    uint64_t now = emu_time_ns();
+    if (until_ns <= now + BUS_SLACK_NS) return;
+    uint64_t wake = until_ns - BUS_SLACK_NS / 2u;
+    emu_sleep_us((wake - now) / 1000u);
+    now = emu_time_ns();
+    s_oversleep_ns = now > until_ns ? now - until_ns : 0;
+}
+
+/* The PL022 clock: clk_peri / (CPSDVSR * (1 + SCR)), chosen the way the Pico
+ * SDK's spi_set_baudrate() does (smallest even prescale, then the largest
+ * post-divide that doesn't exceed the request). WiliBSP asks for 100 MHz from
+ * a 250 MHz clk_peri and gets 62.5 MHz. The rate is recomputed from the
+ * dividers at every transfer, so a later clk_peri change moves it as on the
+ * chip. */
+#define SPI_SCR_LSB 8u
+#define SPI_SCR_BITS 0x0000ff00u
+static uint32_t spi_hz(const spi_inst_t *s) {
+    uint32_t cpsr = s->hw.cpsr, scr = (s->hw.cr0 & SPI_SCR_BITS) >> SPI_SCR_LSB;
+    if (!cpsr || !s->baud) return 0;               /* not initialised: no clock */
+    return (uint32_t)(clock_get_hz(clk_peri) / ((uint64_t)cpsr * (scr + 1u)));
+}
+
+uint spi_set_baudrate(spi_inst_t *s, uint baud) {
+    uint32_t freq = clock_get_hz(clk_peri);
+    uint32_t prescale, postdiv;
+    if (!baud) baud = 1;
+    for (prescale = 2; prescale <= 254; prescale += 2)
+        if (freq < (uint64_t)prescale * 256u * baud) break;
+    if (prescale > 254) prescale = 254;            /* SDK: "frequency too low" */
+    for (postdiv = 256; postdiv > 1; --postdiv)
+        if (freq / (prescale * (postdiv - 1)) > baud) break;
+    s->hw.cpsr = prescale;
+    s->hw.cr0 = (s->hw.cr0 & ~SPI_SCR_BITS) | ((postdiv - 1u) << SPI_SCR_LSB);
+    s->baud = freq / (prescale * postdiv);
+    return s->baud;
+}
+uint spi_init(spi_inst_t *s, uint baud) { s->baud = 1; return spi_set_baudrate(s, baud); }
 void spi_deinit(spi_inst_t *s) { s->baud = 0; }
-uint spi_set_baudrate(spi_inst_t *s, uint baud) { s->baud = baud; return baud; }
-uint spi_get_baudrate(const spi_inst_t *s) { return s->baud; }
+uint spi_get_baudrate(const spi_inst_t *s) { return spi_hz(s); }
+bool spi_is_busy(const spi_inst_t *s) {
+    return emu_bus_timing && s_spi_clk[s->index].free_at_ns > emu_time_ns();
+}
+
+static void spi_timed(spi_inst_t *s, size_t bytes) {
+    cpu_wait_for(bus_occupy(&s_spi_clk[s->index], (uint64_t)bytes * 8u, spi_hz(s)));
+}
+
 int spi_write_blocking(spi_inst_t *s, const uint8_t *src, size_t len) {
     emu_spi_bus_write(s->index, src, len);
+    spi_timed(s, len);
     return (int)len;
 }
 int spi_read_blocking(spi_inst_t *s, uint8_t tx, uint8_t *dst, size_t len) {
     emu_spi_bus_read(s->index, tx, dst, len);
+    spi_timed(s, len);
     return (int)len;
 }
 int spi_write_read_blocking(spi_inst_t *s, const uint8_t *src, uint8_t *dst, size_t len) {
     /* Full duplex: devices that care model it in read(); writes first. */
     emu_spi_bus_write(s->index, src, len);
     emu_spi_bus_read(s->index, 0, dst, len);
+    spi_timed(s, len);
     return (int)len;
 }
 int spi_write16_blocking(spi_inst_t *s, const uint16_t *src, size_t len) {
@@ -159,6 +237,7 @@ int spi_write16_blocking(spi_inst_t *s, const uint16_t *src, size_t len) {
         uint8_t b[2] = { (uint8_t)(src[i] >> 8), (uint8_t)src[i] };
         emu_spi_bus_write(s->index, b, 2);
     }
+    spi_timed(s, len * 2u);
     return (int)len;
 }
 uint spi_get_dreq(spi_inst_t *s, bool tx) { return s->index ? (tx ? DREQ_SPI1_TX : DREQ_SPI1_RX) : (tx ? DREQ_SPI0_TX : DREQ_SPI0_RX); }
@@ -193,13 +272,44 @@ int emu_i2c_bus_read(unsigned bus, uint8_t addr, uint8_t *dst, size_t n, bool no
     return d->read && d->read(d, dst, n, nostop) ? (int)n : PICO_ERROR_GENERIC;
 }
 
-uint i2c_init(i2c_inst_t *i, uint baud) { i->baud = baud; i->enabled = true; return baud; }
+/* SCL period as the SDK's i2c_set_baudrate() rounds it from clk_sys. */
+uint i2c_set_baudrate(i2c_inst_t *i, uint baud) {
+    uint32_t freq = clock_get_hz(clk_sys);
+    uint32_t period = baud ? (freq + baud / 2u) / baud : 0;
+    i->baud = period ? freq / period : 0;
+    return i->baud;
+}
+uint i2c_init(i2c_inst_t *i, uint baud) { i->enabled = true; return i2c_set_baudrate(i, baud); }
 void i2c_deinit(i2c_inst_t *i) { i->enabled = false; }
-uint i2c_set_baudrate(i2c_inst_t *i, uint baud) { i->baud = baud; return baud; }
-int i2c_write_blocking(i2c_inst_t *i, uint8_t a, const uint8_t *s, size_t n, bool ns) { return emu_i2c_bus_write(i->index, a, s, n, ns); }
-int i2c_read_blocking(i2c_inst_t *i, uint8_t a, uint8_t *d, size_t n, bool ns) { return emu_i2c_bus_read(i->index, a, d, n, ns); }
+
+/* START + address + n data bytes (9 clocks each, with ACK) + STOP. A NAK'd
+ * address still costs the address byte. */
+static void i2c_timed(i2c_inst_t *i, size_t n, int rc) {
+    size_t bytes = 1u + (rc > 0 ? n : 0);
+    cpu_wait_for(bus_occupy(&s_i2c_clk[i->index], bytes * 9u + 2u, i->baud));
+}
+int i2c_write_blocking(i2c_inst_t *i, uint8_t a, const uint8_t *s, size_t n, bool ns) {
+    int rc = emu_i2c_bus_write(i->index, a, s, n, ns);
+    if (i->enabled) i2c_timed(i, n, rc);
+    return rc;
+}
+int i2c_read_blocking(i2c_inst_t *i, uint8_t a, uint8_t *d, size_t n, bool ns) {
+    int rc = emu_i2c_bus_read(i->index, a, d, n, ns);
+    if (i->enabled) i2c_timed(i, n, rc);
+    return rc;
+}
 int i2c_write_timeout_us(i2c_inst_t *i, uint8_t a, const uint8_t *s, size_t n, bool ns, uint t) { (void)t; return i2c_write_blocking(i, a, s, n, ns); }
 int i2c_read_timeout_us(i2c_inst_t *i, uint8_t a, uint8_t *d, size_t n, bool ns, uint t) { (void)t; return i2c_read_blocking(i, a, d, n, ns); }
+
+void emu_perf_counters(emu_perf_t *o) {
+    for (int b = 0; b < 2; b++) {
+        o->spi_hz[b] = spi_hz(&emu_spi_inst[b]);
+        o->i2c_hz[b] = emu_i2c_inst[b].enabled ? emu_i2c_inst[b].baud : 0;
+        o->spi_busy_ns[b] = s_spi_clk[b].busy_ns;
+        o->i2c_busy_ns[b] = s_i2c_clk[b].busy_ns;
+    }
+    o->lcd_px_bytes = emu_lcd_pixel_bytes();
+}
 
 /* ================================================================ UART */
 uart_inst_t emu_uart_inst[2] = { { .index = 0 }, { .index = 1 } };
@@ -288,7 +398,9 @@ void emu_irq_raise(unsigned n) {
 
 /* ================================================================= DMA */
 /* Three kinds of transfer:
- *   immediate  memory->SPI (device consumes instantly) and memory->memory
+ *   timed      memory->SPI: the device gets the bytes at the start, and the
+ *              channel stays busy until they would have left the wire
+ *   immediate  memory->memory
  *   paced      channels on a PIO DREQ move one element each time the PIO
  *              model asks (emu_dma_dreq_pull / _push), in real time
  *   UART RX    bytes from a UART model land in an armed channel's ring
@@ -302,7 +414,10 @@ typedef struct {
     bool claimed, irq0_en, irq1_en, irq0_st, irq1_st, busy;
     bool rx_armed, rx_endless;
     uint32_t rx_left;
+    uint64_t done_at_ns;             /* SPI TX: completes when the wire is done */
 } dma_ch_t;
+static unsigned s_dma_timed;         /* channels waiting on done_at_ns */
+static void dma_untime(dma_ch_t *c);
 
 static dma_ch_t s_dma[NUM_DMA_CHANNELS];
 dma_hw_t emu_dma_hw;
@@ -386,6 +501,7 @@ static void dma_start(uint ch) {
     c->hw->transfer_count = c->reload;
     uint32_t n = c->reload;
     int spi = spi_of(c->hw->write_addr);
+    dma_untime(c);                              /* a re-trigger replaces a pending one */
     if (spi >= 0) {
         uint8_t chunk[512];
         uintptr_t rd = c->hw->read_addr;
@@ -399,6 +515,13 @@ static void dma_start(uint ch) {
             n -= k;
         }
         c->hw->read_addr = rd;
+        uint64_t done = bus_occupy(&s_spi_clk[spi], (uint64_t)c->reload * 8u, spi_hz(&emu_spi_inst[spi]));
+        if (done > emu_time_ns()) {
+            c->busy = true;
+            if (!c->done_at_ns) s_dma_timed++;
+            c->done_at_ns = done;
+            return;
+        }
         dma_complete(ch);
         return;
     }
@@ -494,7 +617,19 @@ void dma_channel_set_trans_count(uint ch, uint32_t n, bool t) { s_dma[ch].reload
 void dma_channel_transfer_from_buffer_now(uint ch, const volatile void *rd, uint32_t n) { s_dma[ch].hw->read_addr = (uintptr_t)rd; s_dma[ch].reload = n; dma_start(ch); }
 void dma_channel_transfer_to_buffer_now(uint ch, volatile void *wr, uint32_t n) { s_dma[ch].hw->write_addr = (uintptr_t)wr; s_dma[ch].reload = n; dma_start(ch); }
 void dma_channel_start(uint ch) { dma_start(ch); }
-void dma_channel_abort(uint ch) { s_dma[ch].busy = false; s_dma[ch].rx_armed = false; }
+static void dma_untime(dma_ch_t *c) {
+    if (c->done_at_ns) { c->done_at_ns = 0; s_dma_timed--; } }
+void dma_channel_abort(uint ch) { dma_untime(&s_dma[ch]); s_dma[ch].busy = false; s_dma[ch].rx_armed = false; }
+
+void emu_dma_timed_task(void) {
+    if (!s_dma_timed) return;
+    uint64_t now = emu_time_ns();
+    for (uint ch = 0; ch < NUM_DMA_CHANNELS; ch++)
+        if (s_dma[ch].done_at_ns && s_dma[ch].done_at_ns <= now) {
+            dma_untime(&s_dma[ch]);
+            dma_complete(ch);
+        }
+}
 void dma_channel_cleanup(uint ch) {
     s_dma[ch].irq0_en = s_dma[ch].irq1_en = false;
     s_dma[ch].cfg.chain_to = (uint8_t)ch;
@@ -502,7 +637,7 @@ void dma_channel_cleanup(uint ch) {
     dma_channel_abort(ch);
     s_dma[ch].irq0_st = s_dma[ch].irq1_st = false;
 }
-bool dma_channel_is_busy(uint ch) { emu_poll(); return s_dma[ch].busy; }
+bool dma_channel_is_busy(uint ch) { emu_poll(); emu_dma_timed_task(); return s_dma[ch].busy; }
 void dma_channel_wait_for_finish_blocking(uint ch) { while (s_dma[ch].busy) tight_loop_contents(); }
 void dma_channel_set_irq0_enabled(uint ch, bool en) { s_dma[ch].irq0_en = en; }
 void dma_channel_set_irq1_enabled(uint ch, bool en) { s_dma[ch].irq1_en = en; }

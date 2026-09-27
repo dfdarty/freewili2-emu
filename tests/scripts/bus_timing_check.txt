@@ -1,0 +1,6 @@
+# bus_timing_check: SPI and I2C transfers take their wire time (see the app).
+wait 2000                  # board_init and the power-zone handshake
+expect "bt: (PASS|FAIL)" 5000
+wait 1500                  # let the perf line cover a second of traffic
+screenshot out/bus_timing_check.png device
+quit

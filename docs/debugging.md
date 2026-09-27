@@ -11,6 +11,42 @@ running out of memory, overflowing the 4 KB stack, and code that assumes
 | `FW2_EMU_SANITIZE` build | out-of-bounds accesses, use-after-free, leaks, undefined behaviour |
 | `FW2_EMU_32BIT` build | code that assumes 64-bit pointers or `long` |
 | `tools/fw2emu hwcheck` | apps that do not fit the real chip: image, RAM, PSRAM, stack |
+| the bus readout (`--perf`) | drawing and sensor code that the SPI or I2C bus can't keep up with |
+
+## Is it fast enough? Bus timing
+
+SPI and I2C transfers take as long as they would on the wire, at the clock
+the app configured:
+
+- **SPI** runs at the rate the PL022's dividers really produce. WiliBSP asks
+  for 100 MHz for the LCD from a 250 MHz `clk_peri` and gets **62.5 MHz**, so
+  a full 480×320 screen (307 200 bytes) takes **39.3 ms** — at most about 25
+  full-screen updates a second, however fast your drawing code is.
+  `spi_get_baudrate()` returns that rate, as on the chip.
+- **Blocking calls** (`spi_write_blocking`, `i2c_read_blocking`, …) return
+  when the transfer would have finished.
+- **DMA to SPI** (`st7796_flush_async`) returns at once and completes, with
+  its interrupt, when the last byte would have left the wire, so code that
+  overlaps drawing with a flush behaves as on the board.
+- **I2C** costs 9 clocks a byte plus start and stop: a sensor read of 6
+  bytes after a 1-byte register write takes about 0.2 ms at 400 kHz.
+
+The device's bottom edge shows each bus's load over the last second and how
+much pixel data reached the LCD, in full screens' worth:
+
+```text
+SPI1 62.5 MHz 41%  I2C1 400 kHz 2%  LCD 10.4 screens/s
+```
+
+A bus near 100% is your bottleneck: draw smaller regions, or fewer times.
+`--perf` prints the same line to the log once a second, so a script can
+check it with `expect`.
+
+Two things are still not modelled: the RP2350's own CPU speed (your PC runs
+the app's code much faster than a 250 MHz Cortex-M33, so compute-heavy code
+can still look faster than it is) and memory-to-memory DMA, which completes
+at once. `--instant-bus` turns bus timing off, to see how much of a slowdown
+is the bus.
 
 ## gdb
 

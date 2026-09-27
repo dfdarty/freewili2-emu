@@ -15,6 +15,7 @@ extern "C" {
 
 /* ---------------------------------------------------------------- core */
 uint64_t emu_time_us(void);          /* monotonic, 0 at emulator start      */
+uint64_t emu_time_ns(void);          /* the same clock in nanoseconds       */
 void     emu_poll(void);             /* cheap; call from any wait/spin path */
 void     emu_sleep_us(uint64_t us);  /* sleep while servicing the emulator  */
 void     emu_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
@@ -71,6 +72,20 @@ void   emu_uart_attach(unsigned uart, emu_uart_device_t *dev);
 void   emu_uart_to_mcu(unsigned uart, const uint8_t *b, size_t n); /* device -> MCU RX */
 size_t emu_uart_rx_level(unsigned uart);           /* bytes waiting in the MCU's RX FIFO */
 
+/* ---------------------------------------------------------- bus timing */
+/* SPI and I2C transfers occupy their bus for as long as they would on the
+ * wire at the rate the app configured; blocking calls wait for it and DMA to
+ * SPI completes when the last byte would have been shifted out. */
+extern bool emu_bus_timing;                        /* false with --instant-bus */
+void emu_dma_timed_task(void);                     /* completes timed DMA; from emu_poll */
+typedef struct {
+    uint32_t spi_hz[2], i2c_hz[2];                 /* current bus clocks (0 = off)     */
+    uint64_t spi_busy_ns[2], i2c_busy_ns[2];       /* cumulative time on the wire      */
+    uint64_t lcd_px_bytes;                         /* cumulative RAMWR pixel bytes     */
+} emu_perf_t;
+void emu_perf_counters(emu_perf_t *out);
+const char *emu_perf_line(void);                   /* last 1 s summary; "" until the first */
+
 /* ---------------------------------------------------------------- misc */
 void  emu_timers_task(void);                       /* SDK alarms / repeating timers */
 float emu_adc_input_volts(unsigned input);         /* board voltage at ADC input n (GPIO 40+n) */
@@ -104,6 +119,7 @@ bool emu_pio_sm_enabled(unsigned pio_index, unsigned sm);
 void            emu_lcd_init(void);
 const uint32_t *emu_lcd_pixels(void);       /* ARGB8888, what the glass shows */
 bool            emu_lcd_changed(void);      /* since last call              */
+uint64_t        emu_lcd_pixel_bytes(void);  /* pixel data received, cumulative */
 
 /* Touch (FT6336) */
 void emu_touch_init(void);

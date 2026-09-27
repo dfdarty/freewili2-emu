@@ -77,8 +77,12 @@ static void command(uint8_t c) {
     }
 }
 
+static uint64_t s_px_bytes;
+uint64_t emu_lcd_pixel_bytes(void) { return s_px_bytes; }
+
 static void param(uint8_t b) {
     if (L.cmd == RAMWR || L.cmd == RAMWRC) {
+        s_px_bytes++;
         if (!L.have_hi) { L.hi = b; L.have_hi = true; }
         else { pixel((uint16_t)((L.hi << 8) | b)); L.have_hi = false; }
         return;

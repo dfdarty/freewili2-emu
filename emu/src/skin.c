@@ -211,6 +211,8 @@ static void draw_dynamic(const uint32_t leds[EMU_NUM_LEDS], uint16_t held, uint3
     draw_header(&hv);
     static const char *const route[4] = { "", "AUDIO: SPEAKER", "AUDIO: 3.5MM JACK", "AUDIO: SPEAKER+JACK" };
     if (audio & 3) text(W - 44 - text_w(route[audio & 3], 1), 470, 1, 0x4cc38a, route[audio & 3]);
+    const char *perf = emu_perf_line();
+    if (*perf) text(W - 44 - text_w(perf, 1), 484, 1, 0x7d8490, perf);
 }
 
 void emu_skin_render(uint32_t *out) {
@@ -238,6 +240,7 @@ int emu_skin_frame(uint32_t *out) {
     static int p_tx = -1, p_ty = -1;
     static bool p_touch, p_exit;
     static header_view_t p_hdr;
+    static char p_perf[160];
     header_view_t hdr;
     header_view(&hdr);
     uint32_t leds[EMU_NUM_LEDS];
@@ -249,8 +252,9 @@ int emu_skin_frame(uint32_t *out) {
     bool ex = emu_app_has_exited(NULL);
     int audio = emu_audio_status(NULL);
     bool panel = first || memcmp(leds, p_leds, sizeof leds) || held != p_held || rails != p_rails || audio != p_audio ||
-                 memcmp(&hdr, &p_hdr, sizeof hdr);
+                 memcmp(&hdr, &p_hdr, sizeof hdr) || strcmp(emu_perf_line(), p_perf);
     p_hdr = hdr;
+    snprintf(p_perf, sizeof p_perf, "%s", emu_perf_line());
     bool lcd = emu_lcd_changed() || touch != p_touch || (touch && (tx != p_tx || ty != p_ty)) || ex != p_exit;
     memcpy(p_leds, leds, sizeof leds);
     p_held = held; p_rails = rails; p_audio = audio; p_touch = touch; p_tx = tx; p_ty = ty; p_exit = ex;

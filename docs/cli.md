@@ -17,6 +17,8 @@ same options:
 | `--audio-out WAV` | record everything the codec plays |
 | `--mic-wav WAV` | sound reaching the microphones, looped |
 | `--mute` | don't play audio through the PC |
+| `--perf` | log bus load and LCD throughput once a second (`perf: SPI1 62.5 MHz 41%  I2C1 400 kHz 2%  LCD 10.4 screens/s`); the same line is always on the device's bottom edge — see [bus timing](debugging.md#is-it-fast-enough-bus-timing) |
+| `--instant-bus` | SPI and I2C transfers take no time, as before bus timing existed; for comparing, not for testing |
 | `--sdcard DIR` | folder that stands in for the SD card in the MAIN CPU's slot (default `./sdcard`, created with sample files on first use; `none` = no card) — see [The MAIN processor link](main-link.md) |
 | `--sensor NAME=V[,V...]` | set a sensor or the room sound at start-up, e.g. `temp=24`, `tilt=30,0`, `tone=1000,8000`, `mics=1,1,0,1` (repeatable; names in [Sensors and sound](sensors-and-sound.md)); also header inputs, e.g. `gpio12=1`, and `vrefext=3.3` ([MAIN link](main-link.md#header-gpio-and-vio)) |
 | `-v`, `-vv` | log model activity: power commands, touches, IO expander, audio, OneWili replies; `-vv` also logs every sleep and SD request |

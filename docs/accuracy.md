@@ -31,6 +31,9 @@ attaches a model to each bus, register block or wire protocol:
 - **Power zones.** Parts are dead until the app's `POWER_ZONES` are switched
   on through the real handshake. A missing zone fails here as it does on the
   board.
+- **Bus speed.** SPI runs at the rate the PL022's dividers produce (WiliBSP's
+  LCD: 62.5 MHz, 39.3 ms a full screen), I2C at 9 clocks a byte, so an app
+  that draws more than the bus can carry is slow here too.
 - **Button and touch timing.** Presses and releases arrive as real status
   frames and touch registers, with the board-manager's own framing.
 - **Audio and microphone sample rates** follow the app's clock and PIO
@@ -45,10 +48,14 @@ attaches a model to each bus, register block or wire protocol:
 
 ## Approximate
 
-- **Timing.** SPI and I2C transfers and memory-to-memory DMA complete
-  instantly, so an app that is too slow on the RP2350 can look fine here.
-  PIO audio streams (I2S, PDM) and the two UART links (the board manager at
-  62 500 baud, the MAIN CPU at 8 Mbaud) are paced at their real rates.
+- **Timing.** SPI and I2C transfers take their wire time at the clock the
+  app configured, and DMA to SPI completes when its last byte would have
+  been sent ([details](debugging.md#is-it-fast-enough-bus-timing)).
+  Per-byte gaps and the CPU time spent feeding a blocking transfer are not
+  counted, so the board can be slightly slower. Memory-to-memory DMA
+  completes at once. PIO audio streams (I2S, PDM) and the two UART links
+  (the board manager at 62 500 baud, the MAIN CPU at 8 Mbaud) are paced at
+  their real rates.
 - **CPU speed.** Your PC runs the app much faster than a 250 MHz Cortex-M33,
   and `sleep_ms()` waits in real time. Heavy computation, drawing and
   decoding will be slower on the board.
@@ -82,7 +89,8 @@ example apps.
 | Does it fit in SRAM / PSRAM? Is the stack big enough? | [`fw2emu hwcheck`](debugging.md#real-hardware-check-toolsfw2emu-hwcheck) — builds with the real toolchain |
 | Does it corrupt memory? | the [sanitizer build](debugging.md#sanitizers-fw2_emu_sanitize) |
 | Does it assume 64-bit pointers? | the [32-bit build](debugging.md#32-bit-build-fw2_emu_32bit) |
-| Is it fast enough? Does the radio work? Does it survive a real battery? | the board |
+| Can the SPI or I2C bus keep up? | the [bus readout](debugging.md#is-it-fast-enough-bus-timing) |
+| Is the CPU fast enough? Does the radio work? Does it survive a real battery? | the board |
 
 ## The emulator runs source, not UF2 files
 

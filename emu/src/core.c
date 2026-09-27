@@ -117,6 +117,7 @@ static uint64_t mono_ns(void) {
 }
 
 uint64_t emu_time_us(void) { return (mono_ns() - s_start_ns) / 1000u; }
+uint64_t emu_time_ns(void) { return mono_ns() - s_start_ns; }
 
 static void os_sleep_us(uint64_t us) {
 #ifdef __EMSCRIPTEN__
@@ -329,9 +330,55 @@ static void window_open(void) {
 }
 #endif
 
+/* ------------------------------------------------------------- perf line */
+/* Once a second: how busy each bus was and how much pixel data reached the
+ * LCD, as full 480x320 screens' worth. A bus near 100% is the bottleneck. */
+static bool s_perf_log;                /* --perf: also print it */
+static char s_perf[160];
+const char *emu_perf_line(void) { return s_perf; }
+
+static int fmt_hz(char *o, size_t cap, uint32_t hz) {
+    if (hz >= 1000000u) return snprintf(o, cap, "%.1f MHz", hz / 1e6);
+    return snprintf(o, cap, "%u kHz", (unsigned)(hz / 1000u));
+}
+
+static void perf_task(uint64_t now_us) {
+    static uint64_t last_us;
+    static emu_perf_t prev;
+    if (!last_us) { last_us = now_us; emu_perf_counters(&prev); return; }
+    if (now_us - last_us < 1000000u) return;
+    emu_perf_t cur;
+    emu_perf_counters(&cur);
+    double span_ns = (double)(now_us - last_us) * 1000.0;
+    int n = 0;
+    char hz[24];
+    for (int b = 0; b < 2; b++)
+        if (cur.spi_hz[b]) {
+            fmt_hz(hz, sizeof hz, cur.spi_hz[b]);
+            n += snprintf(s_perf + n, sizeof s_perf - (size_t)n, "%sSPI%d %s %.0f%%", n ? "  " : "", b, hz,
+                          100.0 * (double)(cur.spi_busy_ns[b] - prev.spi_busy_ns[b]) / span_ns);
+        }
+    for (int b = 0; b < 2; b++)
+        if (cur.i2c_hz[b]) {
+            fmt_hz(hz, sizeof hz, cur.i2c_hz[b]);
+            n += snprintf(s_perf + n, sizeof s_perf - (size_t)n, "%sI2C%d %s %.0f%%", n ? "  " : "", b, hz,
+                          100.0 * (double)(cur.i2c_busy_ns[b] - prev.i2c_busy_ns[b]) / span_ns);
+        }
+    double screens = (double)(cur.lcd_px_bytes - prev.lcd_px_bytes) / (EMU_LCD_W * EMU_LCD_H * 2.0)
+                     * 1e9 / span_ns;
+    snprintf(s_perf + n, sizeof s_perf - (size_t)n, "%sLCD %.1f screens/s", n ? "  " : "", screens);
+    if (!emu_bus_timing) strncat(s_perf, "  (instant bus)", sizeof s_perf - strlen(s_perf) - 1);
+    if (s_perf_log) emu_log("perf: %s", s_perf);
+    prev = cur;
+    last_us = now_us;
+}
+
 /* ------------------------------------------------------------ poll/yield */
 void emu_poll(void) {
     if (s_in_poll) return;
+    s_in_poll = true;
+    emu_dma_timed_task();                              /* not rate-limited: DMA-done IRQs are prompt */
+    s_in_poll = false;
     uint64_t now = emu_time_us();
     if (now - s_last_service_us < 1000u) return;       /* service at most 1 kHz */
     s_in_poll = true;
@@ -345,6 +392,7 @@ void emu_poll(void) {
     emu_timers_task();
     emu_rtt_task();
     emu_script_task();
+    perf_task(now);
 
     if (s_run_limit_us && now >= s_run_limit_us) {
         s_in_poll = false;
@@ -462,6 +510,8 @@ static void usage(void) {
         "  --audio-out WAV     record everything the codec plays\n"
         "  --mic-wav WAV       sound reaching the microphones (looped)\n"
         "  --mute              don't play audio through the PC\n"
+        "  --perf              log bus load and LCD throughput once a second\n"
+        "  --instant-bus       SPI/I2C transfers take no time (to compare against the old, untimed model)\n"
         "  --sdcard DIR        folder that stands in for the SD card (default ./sdcard; 'none' = no card)\n"
         "  --sensor NAME=V     set a sensor or sound: temp=24 lux=320 tilt=30,0 tone=1000,8000 mics=1,1,0,1\n"
         "                      gyro=0,0,0 mag=22,5,-40 tilt=PITCH,ROLL noise=1\n"
@@ -496,6 +546,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--audio-out") && i + 1 < argc) emu_audio_set_wav_out(argv[++i]);
         else if (!strcmp(a, "--mic-wav") && i + 1 < argc) emu_audio_set_mic_wav(argv[++i]);
         else if (!strcmp(a, "--mute")) s_mute = true;
+        else if (!strcmp(a, "--perf")) s_perf_log = true;
+        else if (!strcmp(a, "--instant-bus")) emu_bus_timing = false;
         else if (!strcmp(a, "--sdcard") && i + 1 < argc) sdcard = argv[++i];
         else if (!strcmp(a, "-v")) emu_verbose = 1;
         else if (!strcmp(a, "-vv")) emu_verbose = 2;

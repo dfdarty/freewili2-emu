@@ -58,7 +58,7 @@ static inline void spi_set_format(spi_inst_t *spi, uint data_bits, spi_cpol_t cp
 static inline void spi_set_slave(spi_inst_t *spi, bool slave) { (void)spi; (void)slave; }
 static inline bool spi_is_writable(const spi_inst_t *spi) { (void)spi; return true; }
 static inline bool spi_is_readable(const spi_inst_t *spi) { (void)spi; return false; }
-static inline bool spi_is_busy(const spi_inst_t *spi) { (void)spi; return false; }
+bool spi_is_busy(const spi_inst_t *spi);         /* true while the bus is still shifting */
 
 int spi_write_blocking(spi_inst_t *spi, const uint8_t *src, size_t len);
 int spi_read_blocking(spi_inst_t *spi, uint8_t repeated_tx_data, uint8_t *dst, size_t len);
