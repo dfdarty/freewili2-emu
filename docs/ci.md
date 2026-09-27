@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - uses: dfdarty/freewili2-emu@main
+      - uses: dfdarty/freewili2-emu@v1
         with:
           app: .                 # the folder with CMakeLists.txt
 ```
@@ -62,7 +62,7 @@ jobs:
         app: [apps/logger, apps/viewer]
     steps:
       - uses: actions/checkout@v7
-      - uses: dfdarty/freewili2-emu@main
+      - uses: dfdarty/freewili2-emu@v1
         with:
           app: ${{ matrix.app }}
           sanitize: true
@@ -72,7 +72,7 @@ jobs:
 A flight computer tested against a recorded flight:
 
 ```yaml
-      - uses: dfdarty/freewili2-emu@main
+      - uses: dfdarty/freewili2-emu@v1
         with:
           app: .
           script: tests/flight.txt
@@ -101,5 +101,8 @@ the action does ([details](cli.md#fw2emu-test-build-one-app-run-its-test-and-che
 
 ## Which version
 
-`@main` follows this repository. To stay on one version of the emulator,
-use a commit instead: `dfdarty/freewili2-emu@<commit sha>`.
+- `@v1` (recommended) follows the v1 releases: fixes and new models arrive
+  without changes to your workflow. Anything that would break a v1 workflow
+  gets a new major version.
+- `@v1.0.0` (or a commit SHA) stays on exactly one version.
+- `@main` is the latest commit, for trying something before it is released.
