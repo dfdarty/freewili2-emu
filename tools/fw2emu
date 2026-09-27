@@ -498,11 +498,13 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
 
 def cmd_web(a):
     if not shutil.which("emcc") or not shutil.which("emcmake"):
-        die("emcc not found. Install and activate Emscripten (the project uses 4.0.15):\n"
+        die("emcc not found. Install and activate Emscripten 4.0.15:\n"
             "  git clone https://github.com/emscripten-core/emsdk.git ~/emsdk\n"
             "  ~/emsdk/emsdk install 4.0.15 && ~/emsdk/emsdk activate 4.0.15\n"
             "  source ~/emsdk/emsdk_env.sh\n"
-            "or build the Docker image instead (see README).")
+            "The first build downloads SDL2 from GitHub; on a restricted network see\n"
+            "\"The browser build yourself\" in docs/getting-started.md\n"
+            f"({DOCS}/getting-started/#the-browser-build-yourself), which also covers Docker.")
     build = os.path.abspath(a.build_dir or os.path.join(ROOT, "build-web-run"))
     target, bindir = build_one_app(a.app, build, ["-DCMAKE_BUILD_TYPE=Release"], web=True)
     args = a.emu_args[1:] if a.emu_args[:1] == ["--"] else a.emu_args
@@ -527,6 +529,105 @@ def cmd_web(a):
 
 
 # --------------------------------------------------------------------- hwcheck
+
+
+# Known failures of WiliBSP's own example apps that come from WiliBSP or its
+# libraries, not from the app or from this tool. They are reported as
+# "KNOWN (upstream)" and don't change the exit status (--strict makes them
+# count). Keyed by (app, kind); they never apply to apps outside WiliBSP.
+DOCS = "https://dfdarty.github.io/freewili2-emu"
+KNOWN_UPSTREAM = {
+    ("hello_psram_exec", "layout"): (
+        "WiliBSP's psram_link selects the SRAM-bootstrap objects as *.c.obj (Windows naming); "
+        "with *.c.o (Linux/macOS) clock/QMI code lands in PSRAM and verify_layout.py rejects it",
+        f"{DOCS}/compatibility/#known-upstream-issues"),
+    ("toggleled", "stack"): (
+        "every generated OneWili text command keeps ~10 KB of buffers on the stack (libs/onewili)",
+        f"{DOCS}/compatibility/#known-upstream-issues"),
+    ("hello_vref", "stack"): (
+        "every generated OneWili text command keeps ~10 KB of buffers on the stack (libs/onewili)",
+        f"{DOCS}/compatibility/#known-upstream-issues"),
+}
+
+
+def failure_kinds(r):
+    """Classify a result's error messages: {'stack', 'layout', 'other'}."""
+    kinds = set()
+    for m in r.get("messages", []):
+        if m["level"] != "error":
+            continue
+        t = m["text"]
+        if "stack" in t and ("overflow" in t or "does not fit" in t):
+            kinds.add("stack")
+        elif t.startswith("a post-link check failed") and any(
+                "layout check:" in ln for ln in r.get("build_errors", [])):
+            kinds.add("layout")
+        else:
+            kinds.add("other")
+    return kinds
+
+
+def apply_known_upstream(r, stale):
+    """Mark a WiliBSP example's known upstream failures; record entries that no longer occur."""
+    d = os.path.realpath(r["dir"])
+    if os.path.dirname(d) != os.path.realpath(os.path.join(WILIBSP, "apps")):
+        return
+    kinds = failure_kinds(r) if r["status"] == "error" else set()
+    mine = {k: v for (app, k), v in KNOWN_UPSTREAM.items() if app == r["app"]}
+    for k in mine:
+        if k not in kinds and "memory" in r:          # it built, and the known failure is gone
+            stale.append((r["app"], k))
+    if kinds and kinds <= set(mine):
+        r["status"] = "known"
+        r["known_upstream"] = [dict(kind=k, reason=mine[k][0], docs=mine[k][1]) for k in sorted(kinds)]
+
+
+def elf_compilers(elf_path):
+    """Compiler versions recorded in the linked image's .comment section."""
+    try:
+        elf = stackcheck.Elf(elf_path)
+    except (OSError, ValueError):
+        return []
+    sec = elf.section(".comment")
+    if not sec:
+        return []
+    raw = elf._data[sec["offset"]:sec["offset"] + sec["size"]].decode("ascii", "replace")
+    found = []
+    for s in raw.split("\0"):
+        m = re.match(r"GCC: \((.*?)\) (\d+\.\d+\.\d+)", s.strip())
+        if m and (m.group(2), m.group(1)) not in found:
+            found.append((m.group(2), m.group(1)))
+    return found
+
+
+def toolchain_changed(build, gcc_path, version):
+    """Record the toolchain in the build folder; wipe the CMake cache if it changed."""
+    rec_path = os.path.join(build, "fw2emu-toolchain.json")
+    want = dict(gcc=os.path.realpath(gcc_path), version=version)
+    cache = os.path.join(build, "CMakeCache.txt")
+    old = None
+    if os.path.exists(rec_path):
+        try:
+            with open(rec_path) as f:
+                old = json.load(f)
+        except (OSError, ValueError):
+            old = None
+    cached_cc = None
+    if os.path.exists(cache):
+        with open(cache, errors="replace") as f:
+            for ln in f:
+                if ln.startswith("CMAKE_C_COMPILER:"):
+                    cached_cc = os.path.realpath(ln.split("=", 1)[1].strip())
+    # A folder configured before the record existed is judged by its cached compiler.
+    changed = os.path.exists(cache) and ((old is not None and old != want) or
+                                         (cached_cc is not None and cached_cc != want["gcc"]))
+    if changed:
+        was = (old or {}).get("gcc") or cached_cc or "?"
+        print(f"fw2emu: toolchain changed ({was} -> {want['gcc']}, {version}): "
+              f"reconfiguring {build} from scratch", file=sys.stderr)
+        os.unlink(cache)
+        shutil.rmtree(os.path.join(build, "CMakeFiles"), ignore_errors=True)
+    return rec_path, want
 
 
 def cmd_hwcheck(a):
@@ -554,6 +655,7 @@ def cmd_hwcheck(a):
     sdk = find_sdk(a.sdk)
     build = os.path.abspath(a.build_dir)
     os.makedirs(build, exist_ok=True)
+    rec_path, rec = toolchain_changed(build, os.path.join(bindir, "arm-none-eabi-gcc"), gv)
 
     cfg = ["cmake", "-S", os.path.join(ROOT, "hwcheck"), "-B", build, "-G", "Ninja",
            f"-DPICO_SDK_PATH={sdk}", "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
@@ -576,6 +678,8 @@ def cmd_hwcheck(a):
     out = subprocess.DEVNULL if a.json else None
     if run(cfg, stdout=out).returncode:
         die("configure failed", 1)
+    with open(rec_path, "w") as f:
+        json.dump(rec, f)
     log_path = os.path.join(build, "hwcheck-build.log")
     with open(log_path, "w") as log:
         p = run(["cmake", "--build", build, "--", "-k", "0"], stdout=log, stderr=subprocess.STDOUT)
@@ -612,8 +716,24 @@ def cmd_hwcheck(a):
                 r.update(check_elf(elf, build, bindir))
             results.append(r)
 
-    meta = dict(pico_sdk=sdk_version(sdk), pico_sdk_path=sdk, gcc=gcc_version(bindir),
-                build_dir=build, wilibsp_pinned_toolchain=PICO_TOOLCHAIN_VERSION)
+    stale = []
+    compilers = []
+    for r in results:
+        apply_known_upstream(r, stale)
+        elf = os.path.join(build, "apps", os.path.basename(r["dir"]), r["app"] + ".elf")
+        r["compiler"] = [f"{v} ({label})" for v, label in elf_compilers(elf)]
+        for c in elf_compilers(elf):
+            if c not in compilers:
+                compilers.append(c)
+    # The version comes from what was actually linked, not from the tool we meant to use.
+    linked = ", ".join(sorted({v for v, _ in compilers})) or gv
+    if compilers and gv not in {v for v, _ in compilers}:
+        print(f"fw2emu: warning: the images were built by arm-none-eabi-gcc {linked}, "
+              f"not {gv} at {bindir}", file=sys.stderr)
+    meta = dict(pico_sdk=sdk_version(sdk), pico_sdk_path=sdk, gcc=linked,
+                gcc_detail=[f"{v} ({label})" for v, label in compilers], gcc_path=rec["gcc"],
+                build_dir=build, wilibsp_pinned_toolchain=PICO_TOOLCHAIN_VERSION,
+                strict=bool(a.strict), stale_known_upstream=[f"{app}:{k}" for app, k in stale])
     if a.json:
         json.dump(dict(tool=meta, apps=results), sys.stdout, indent=2, default=str)
         print()
@@ -622,7 +742,14 @@ def cmd_hwcheck(a):
     if a.output:
         with open(a.output, "w") as f:
             json.dump(dict(tool=meta, apps=results), f, indent=2, default=str)
-    return 1 if any(r["status"] == "error" for r in results) else 0
+    for app, k in stale:
+        msg = (f"known upstream issue {app}:{k} no longer occurs; "
+               "remove it from KNOWN_UPSTREAM in tools/fw2emu (and docs/compatibility.md)")
+        print(f"fw2emu: warning: {msg}", file=sys.stderr)
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            print(f"::warning title=Stale known upstream issue::{msg}")
+    bad = {"error", "known"} if a.strict else {"error"}
+    return 1 if any(r["status"] in bad for r in results) else 0
 
 
 def ninja_failures(log):
@@ -671,7 +798,7 @@ def _kb(n):
 
 
 def print_table(meta, results, verbose):
-    print(f"\nFREE-WILi 2 hardware check: Pico SDK {meta['pico_sdk']}, arm-none-eabi-gcc {meta['gcc']}"
+    print(f"\nFREE-WILi 2 hardware check: Pico SDK {meta['pico_sdk']}, arm-none-eabi-gcc {meta['gcc']} (linked)"
           f" (WiliBSP's pinned toolchain is {meta['wilibsp_pinned_toolchain']})\n")
     hdr = (f"{'app':<17} {'image (loaded)':>24} {'SRAM (static)':>20} {'PSRAM (all)':>20} "
            f"{'stack':>14} {'unknowns':>9}  status")
@@ -694,7 +821,8 @@ def print_table(meta, results, verbose):
         unk = stackcheck.count_unknown(s["main"]["unknown"])
         for h in s["irq"]:
             unk += stackcheck.count_unknown(h["unknown"])
-        print(f"{r['app']:<17} {img_s:>24} {ram_s:>20} {ps_s:>20} {st_s:>14} {unk:>9}  {r['status'].upper()}")
+        status = "KNOWN (upstream)" if r["status"] == "known" else r["status"].upper()
+        print(f"{r['app']:<17} {img_s:>24} {ram_s:>20} {ps_s:>20} {st_s:>14} {unk:>9}  {status}")
     print()
     for r in results:
         print(f"{r['app']}  ({r['dir']})")
@@ -763,11 +891,16 @@ def print_table(meta, results, verbose):
 
 def _print_messages(r):
     errs = r.get("build_errors", [])
+    known = r["status"] == "known"
     for i, msg in enumerate(r.get("messages", [])):
-        print(f"  {msg['level'].upper()}: {msg['text']}")
+        level = "KNOWN" if known and msg["level"] == "error" else msg["level"].upper()
+        print(f"  {level}: {msg['text']}")
         if i == 0 and errs:              # the build-failure message comes first
             for ln in errs:
                 print(f"      {ln}")
+    for k in r.get("known_upstream", []):
+        print(f"  KNOWN upstream issue ({k['kind']}): {k['reason']}")
+        print(f"      {k['docs']}")
 
 
 # --------------------------------------------------------------------- main
@@ -817,6 +950,8 @@ def main():
     h.add_argument("--fetch-toolchain", action="store_true",
                    help="if no Arm GNU Toolchain 14.2.Rel1 is found, download it into ~/.cache/fw2emu "
                         "(Linux x86_64/aarch64)")
+    h.add_argument("--strict", action="store_true",
+                   help="known upstream failures of WiliBSP's example apps also count (exit 1)")
     h.add_argument("--exclude", action="append", metavar="APP", default=[],
                    help="skip an app (folder or target name); repeatable")
     h.add_argument("--json", action="store_true", help="print JSON instead of the table")

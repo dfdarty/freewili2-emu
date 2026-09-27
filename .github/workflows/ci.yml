@@ -18,7 +18,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends cmake ninja-build libsdl2-dev python3
+          sudo apt-get install -y --no-install-recommends cmake ninja-build libsdl2-dev zlib1g-dev python3
       - name: Build and run every app headless
         run: tests/smoke.sh
       - name: Upload screenshots and logs
@@ -41,7 +41,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends cmake ninja-build libsdl2-dev python3
+          sudo apt-get install -y --no-install-recommends cmake ninja-build libsdl2-dev zlib1g-dev python3
       # ASan's shadow layout does not fit the 32-bit mmap randomisation that
       # newer runner kernels use; 28 bits is the usual setting.
       - name: Limit mmap randomisation for ASan
@@ -105,26 +105,15 @@ jobs:
           key: fw2emu-arm-14.2.rel1-pico-sdk-2.3.0-${{ runner.os }}-${{ hashFiles('tools/fw2emu') }}
           restore-keys: fw2emu-arm-14.2.rel1-pico-sdk-2.3.0-${{ runner.os }}-
       - name: Build every app for the RP2350 and check memory and stack
-        # The apps in the next step are checked separately: they fail for
-        # upstream reasons (see there).
+        # Known upstream failures of WiliBSP's own examples (hello_psram_exec's
+        # layout check, the OneWili stack use of toggleled / hello_vref) are
+        # listed in tools/fw2emu (KNOWN_UPSTREAM) and reported as
+        # "KNOWN (upstream)" without failing the run; any other error fails
+        # it. If a listed issue stops occurring, hwcheck emits a warning
+        # annotation so the list gets updated.
         run: |
           mkdir -p out
-          tools/fw2emu hwcheck --fetch-toolchain --exclude hello_psram_exec \
-            --exclude toggleled --exclude hello_vref -v -o out/hwcheck.json
-      - name: Known upstream issues (hello_psram_exec, toggleled, hello_vref)
-        # hello_psram_exec: WiliBSP's bsp/app/psram_link/sections_no_flash.incl
-        # selects the SDK objects for the SRAM bootstrap as *<name>.c.obj;
-        # CMake names objects *.c.o on Linux/macOS, so clock/QMI code lands in
-        # PSRAM and the app's verify_layout.py rejects the image.
-        # toggleled, hello_vref: every generated OneWili text command keeps
-        # ~10 KB of buffers on the stack (cmd/resp in the call, out/linebuf in
-        # ow__call), more than both 4 KB scratch banks. Reported upstream;
-        # non-blocking here.
-        continue-on-error: true
-        run: |
-          tools/fw2emu hwcheck --fetch-toolchain -v -o out/hwcheck-upstream-issues.json \
-            third_party/wilibsp/apps/hello_psram_exec third_party/wilibsp/apps/toggleled \
-            third_party/wilibsp/apps/hello_vref
+          tools/fw2emu hwcheck --fetch-toolchain -v -o out/hwcheck.json
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
