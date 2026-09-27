@@ -32,7 +32,7 @@ it, so it is never lost between two polls.
 
 ## Browser page
 
-The browser version adds panels beside the device:
+The browser version adds a guide beside the device and a row of panels under it (one to four columns, depending on the window width):
 
 - **App picker** and **Restart** at the top. `?app=NAME` in the URL picks an
   app; `?args=...` passes [command-line flags](cli.md), for example
@@ -42,7 +42,7 @@ The browser version adds panels beside the device:
   play a tone into one microphone, type with the chord keyboard, …) by moving
   the same sliders and pressing the same keys you would. It also says which
   log line confirms the result. Panels the app uses are outlined, tagged
-  "used by this app" and moved up next to the guide. Your own apps get a
+  "used by this app" and listed first in the panels under the device. Your own apps get a
   short general guide.
 - **Sensors:** temperature, humidity, light, pitch, roll and compass heading,
   plus sensor noise.

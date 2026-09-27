@@ -22,9 +22,13 @@
                    border-radius: 6px; padding: 6px 10px; font: inherit; }
   button:hover, select:hover { border-color: #3d4450; }
   #desc { color: var(--muted); flex: 1 1 260px; }
-  main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 16px 20px 24px;
-         max-width: 1240px; margin: 0 auto; }
-  @media (min-width: 1180px) { main { grid-template-columns: 900px minmax(0, 1fr); } }
+  main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 16px 20px 0;
+         max-width: 1480px; margin: 0 auto; align-items: start; }
+  @media (min-width: 1180px) { main { grid-template-columns: minmax(0, 900px) minmax(300px, 1fr); } }
+  /* the controls sit under the device: 1-4 columns depending on width */
+  #panels { display: grid; gap: 12px; padding: 16px 20px 24px; max-width: 1480px; margin: 0 auto;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); align-items: start; }
+  #panels #log { height: 260px; }
   #stage { position: relative; width: 100%; max-width: 900px; aspect-ratio: 900 / 520; }
   canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated;
            border-radius: 14px; outline: none; background: #0f1115; }
@@ -45,9 +49,9 @@
   .sl label { color: var(--muted); }
   .sl output { text-align: right; font-variant-numeric: tabular-nums; }
   input[type=range] { width: 100%; accent-color: var(--accent); }
-  footer { color: var(--muted); font-size: 12px; padding: 0 20px 20px; max-width: 1240px; margin: 0 auto; }
+  footer { color: var(--muted); font-size: 12px; padding: 0 20px 20px; max-width: 1480px; margin: 0 auto; }
   a { color: var(--accent); }
-  #demo-note { max-width: 1200px; margin: 12px auto 0; padding: 10px 14px; border: 1px solid var(--line);
+  #demo-note { max-width: 1440px; margin: 12px auto 0; padding: 10px 14px; border: 1px solid var(--line);
                border-left: 3px solid var(--accent); border-radius: 8px; background: var(--panel);
                font-size: 13px; line-height: 1.5; }
   #demo-note[hidden] { display: none; }
@@ -103,45 +107,47 @@
       <ul id="g-try"></ul>
       <p class="note" id="g-check"></p>
     </div>
-    <div class="card" id="card-controls">
-      <h2>Controls</h2>
-      <p class="hint">Keys and mouse act like the device's buttons and touch screen. Click the device first so it has keyboard focus.</p>
-      <dl>
-        <dt><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> <kbd>Enter</kbd></dt><dd>D-pad</dd>
-        <dt><kbd>H</kbd> <kbd>O</kbd> <kbd>C</kbd> <kbd>P</kbd></dt><dd>HOME · OK · CANCEL · PAGE</dd>
-        <dt><kbd>1</kbd>–<kbd>5</kbd></dt><dd>grey · yellow · green · blue · red</dd>
-        <dt>click / drag</dt><dd>touch the screen, or press a key on the panel</dd>
-        <dt>hold <kbd>H</kbd> 5 s</dt><dd>exit the app (WiliBSP recovery)</dd>
-        <dt><kbd>F2</kbd></dt><dd>download a PNG of the whole panel</dd>
-      </dl>
-    </div>
-    <div class="card" id="card-sensors">
-      <h2>Sensors</h2>
-      <p class="hint">What the on-board sensors measure. Move a slider and the app reads the new value over I2C, exactly as its driver would on the board.</p>
-      <div class="sl" id="sensors"></div>
-    </div>
-    <div class="card" id="card-sound">
-      <h2>Sound in the room</h2>
-      <p class="hint">Sound reaching the microphones: a test tone, plus how much of it each mic picks up. Mics are listed left to right as on the device.</p>
-      <div class="sl" id="sound"></div>
-    </div>
-    <div class="card" id="card-header">
-      <h2>GPIO header inputs</h2>
-      <p class="hint">The expansion header, reached through the MAIN processor. The strip under the device shows what apps drive; here you drive pins from outside.</p>
-      <div class="pins" id="pins"></div>
-      <div class="sl"><label for="vrefext">Trig_IN/VREF</label><select id="vrefext">
-        <option value="-1">nothing</option><option>1.8</option><option>3.3</option><option>5.0</option>
-      </select><span></span></div>
-      <p class="note">Click a pin to drive it from outside: open → high → low. The SD card is
-        held in memory and starts fresh on every load.</p>
-    </div>
-    <div class="card" id="card-log">
-      <h2>RTT diagnostics</h2>
-      <p class="hint">The app's own log (<code>DIAG()</code> lines), as WiliBSP's <code>fw rtt</code> shows it on hardware. Grey lines are the emulator's notes.</p>
-      <pre id="log"></pre>
-    </div>
   </aside>
 </main>
+<section id="panels">
+  <div class="card" id="card-controls">
+    <h2>Controls</h2>
+    <p class="hint">Keys and mouse act like the device's buttons and touch screen. Click the device first so it has keyboard focus.</p>
+    <dl>
+      <dt><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> <kbd>Enter</kbd></dt><dd>D-pad</dd>
+      <dt><kbd>H</kbd> <kbd>O</kbd> <kbd>C</kbd> <kbd>P</kbd></dt><dd>HOME · OK · CANCEL · PAGE</dd>
+      <dt><kbd>1</kbd>–<kbd>5</kbd></dt><dd>grey · yellow · green · blue · red</dd>
+      <dt>click / drag</dt><dd>touch the screen, or press a key on the panel</dd>
+      <dt>hold <kbd>H</kbd> 5 s</dt><dd>exit the app (WiliBSP recovery)</dd>
+      <dt><kbd>F2</kbd></dt><dd>download a PNG of the whole panel</dd>
+    </dl>
+  </div>
+  <div class="card" id="card-sensors">
+    <h2>Sensors</h2>
+    <p class="hint">What the on-board sensors measure. Move a slider and the app reads the new value over I2C, exactly as its driver would on the board.</p>
+    <div class="sl" id="sensors"></div>
+  </div>
+  <div class="card" id="card-sound">
+    <h2>Sound in the room</h2>
+    <p class="hint">Sound reaching the microphones: a test tone, plus how much of it each mic picks up. Mics are listed left to right as on the device.</p>
+    <div class="sl" id="sound"></div>
+  </div>
+  <div class="card" id="card-header">
+    <h2>GPIO header inputs</h2>
+    <p class="hint">The expansion header, reached through the MAIN processor. The strip under the device shows what apps drive; here you drive pins from outside.</p>
+    <div class="pins" id="pins"></div>
+    <div class="sl"><label for="vrefext">Trig_IN/VREF</label><select id="vrefext">
+      <option value="-1">nothing</option><option>1.8</option><option>3.3</option><option>5.0</option>
+    </select><span></span></div>
+    <p class="note">Click a pin to drive it from outside: open → high → low. The SD card is
+      held in memory and starts fresh on every load.</p>
+  </div>
+  <div class="card" id="card-log">
+    <h2>RTT diagnostics</h2>
+    <p class="hint">The app's own log (<code>DIAG()</code> lines), as WiliBSP's <code>fw rtt</code> shows it on hardware. Grey lines are the emulator's notes.</p>
+    <pre id="log"></pre>
+  </div>
+</section>
 <footer>
   WiliBSP apps compiled unmodified against an emulated FREE-WILi 2 display CPU.
   Radios, bus timing and analog behaviour are not modelled — verify on hardware.
@@ -499,18 +505,19 @@
     li.insertAdjacentHTML('beforeend', t.text || '');
     ul.append(li);
   }
-  // Panels this app uses: highlight them and move them up under the guide
-  // (inputs first, then the log), so the thing to watch is on screen.
-  let after = document.getElementById('guide');
+  // Panels this app uses: highlight them and put them first in the panel grid
+  // under the device (inputs first, then the log).
+  const panelGrid = document.getElementById('panels');
   const focus = (g.panels || []).slice().sort((a, b) => (a === 'log') - (b === 'log'));
+  const used = [];
   for (const id of focus) {
     const card = document.getElementById(`card-${id}`);
     if (!card) continue;
     card.classList.add('focus');
     card.querySelector('h2').insertAdjacentHTML('beforeend', '<span class="tag">used by this app</span>');
-    after.after(card);
-    after = card;
+    used.push(card);
   }
+  panelGrid.prepend(...used);
   const ht = document.getElementById('hints-toggle');
   const setHints = on => { document.body.classList.toggle('nohints', !on); ht.textContent = on ? 'hide hints' : 'show hints'; };
   let hintsOn = true;
