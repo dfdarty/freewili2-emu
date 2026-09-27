@@ -66,6 +66,7 @@ function(fw2_display_app target)
     target_sources(${target} PRIVATE "${_dir}/${target}_uf2_info.c")
     target_compile_definitions(${target} PRIVATE main=fw2_emu_app_main PICO_TARGET_NAME="${target}")
     set_property(GLOBAL APPEND PROPERTY FW2_EMU_APPS "${target}|${APP_VERSION}|${APP_DESCRIPTION}")
+    set_property(TARGET ${target} PROPERTY FW2_EMU_APP TRUE)
 
     if(EMSCRIPTEN)
         set_target_properties(${target} PROPERTIES SUFFIX ".js")
@@ -85,4 +86,29 @@ endfunction()
 
 function(fw2_psram_app target)
     fw2_display_app(${target} ${ARGN})
+endfunction()
+
+# An app's own CMakeLists.txt may add POST_BUILD steps that inspect the Arm
+# image (hello_psram_exec runs verify_layout.py on the ELF and UF2). On the
+# host the target is a host executable, so those checks can't apply; the real
+# build that `tools/fw2emu hwcheck` runs executes them against the Arm image.
+# This wrapper drops POST_BUILD/PRE_LINK/PRE_BUILD steps attached to app
+# targets and forwards everything else unchanged (arguments are re-quoted so
+# empty strings and semicolons survive).
+function(add_custom_command)
+    if(ARGC GREATER 2 AND ARGV0 STREQUAL "TARGET" AND TARGET "${ARGV1}")
+        get_target_property(_is_app "${ARGV1}" FW2_EMU_APP)
+        if(_is_app)
+            message(STATUS "${ARGV1}: skipping a hardware-image build step on the host (fw2emu hwcheck runs it)")
+            return()
+        endif()
+    endif()
+    set(_code "_add_custom_command(")
+    math(EXPR _last "${ARGC} - 1")
+    foreach(_i RANGE 0 ${_last})
+        set(_a "${ARGV${_i}}")
+        string(APPEND _code " [==[${_a}]==]")
+    endforeach()
+    string(APPEND _code ")")
+    cmake_language(EVAL CODE "${_code}")
 endfunction()

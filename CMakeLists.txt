@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.18)
 
 # freewili2-emu — run FREE-WILi 2 (WiliBSP) apps on a PC or in a browser.
 #
@@ -159,7 +159,7 @@ include(cmake/fw2_emu_app.cmake)
 # ------------------------------------------------------------------ apps
 # WiliBSP's own apps, built straight from the submodule with their own
 # CMakeLists.txt. Your apps go in apps/ (see apps/README.md).
-set(FW2_EMU_UPSTREAM_APPS template hello_display hello_agentio hello_sensors hello_audio hello_mics CACHE STRING "WiliBSP apps to build")
+set(FW2_EMU_UPSTREAM_APPS template hello_display hello_agentio hello_sensors hello_audio hello_mics hello_keyboard hello_charger hello_psram_exec CACHE STRING "WiliBSP apps to build")
 foreach(_app IN LISTS FW2_EMU_UPSTREAM_APPS)
     add_subdirectory("${WILIBSP_DIR}/apps/${_app}" "${CMAKE_BINARY_DIR}/wilibsp/${_app}")
 endforeach()

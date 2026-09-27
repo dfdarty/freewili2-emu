@@ -1,0 +1,4 @@
+# hello_psram_exec: fw2_psram_app() image, RGB LED rail power-cycle, then UI.
+wait 11500
+screenshot out/hello_psram_exec.png
+quit

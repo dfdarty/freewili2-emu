@@ -1,0 +1,4 @@
+# hello_charger: charger / USB-C status from the board-manager status frames.
+wait 3000
+screenshot out/hello_charger.png
+quit

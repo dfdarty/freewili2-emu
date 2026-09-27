@@ -1,0 +1,9 @@
+# hello_keyboard: two-press chord keyboard over the board-manager button link.
+# GREY picks the a-e group, YELLOW the second letter in it: 'b'.
+wait 2500
+press GREY
+wait 300
+press YELLOW
+wait 500
+screenshot out/hello_keyboard.png
+quit
