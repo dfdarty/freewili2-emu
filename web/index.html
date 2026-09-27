@@ -28,7 +28,9 @@
     main { grid-template-columns: minmax(0, 900px) minmax(300px, 1fr); align-items: stretch; }
     /* the guide is exactly as tall as the device; longer guides scroll inside it */
     main > aside { position: relative; }
-    main > aside > #guide { position: absolute; inset: 0; overflow-y: auto; }
+    /* the device body is drawn 18 px inside the 900x520 canvas: line the guide up with it */
+    main > aside > #guide { position: absolute; top: calc(18 / 520 * 100%); bottom: calc(18 / 520 * 100%);
+                            left: 0; right: 0; overflow-y: auto; }
   }
   /* the controls sit under the device: 1-4 columns depending on width */
   #panels { display: grid; gap: 12px; padding: 16px 20px 24px; max-width: 1880px; margin: 0 auto;
