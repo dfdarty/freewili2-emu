@@ -23,7 +23,7 @@
   button:hover, select:hover { border-color: #3d4450; }
   #desc { color: var(--muted); flex: 1 1 260px; }
   main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 16px 20px 0;
-         max-width: 1480px; margin: 0 auto; align-items: start; }
+         max-width: 1880px; margin: 0 auto; align-items: start; }
   @media (min-width: 1180px) {
     main { grid-template-columns: minmax(0, 900px) minmax(300px, 1fr); align-items: stretch; }
     /* the guide is exactly as tall as the device; longer guides scroll inside it */
@@ -31,8 +31,8 @@
     main > aside > #guide { position: absolute; inset: 0; overflow-y: auto; }
   }
   /* the controls sit under the device: 1-4 columns depending on width */
-  #panels { display: grid; gap: 12px; padding: 16px 20px 24px; max-width: 1480px; margin: 0 auto;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  #panels { display: grid; gap: 12px; padding: 16px 20px 24px; max-width: 1880px; margin: 0 auto;
+            grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));   /* 5 across on a wide screen */
             grid-auto-rows: 1fr; align-items: stretch; }   /* every panel the same height */
   #panels .card { display: flex; flex-direction: column; min-height: 0; }
   #panels #log { flex: 1 1 0; height: auto; min-height: 240px; }   /* fills its card, scrolls inside; never sets the row height */
@@ -56,9 +56,9 @@
   .sl label { color: var(--muted); }
   .sl output { text-align: right; font-variant-numeric: tabular-nums; }
   input[type=range] { width: 100%; accent-color: var(--accent); }
-  footer { color: var(--muted); font-size: 12px; padding: 0 20px 20px; max-width: 1480px; margin: 0 auto; }
+  footer { color: var(--muted); font-size: 12px; padding: 0 20px 20px; max-width: 1880px; margin: 0 auto; }
   a { color: var(--accent); }
-  #demo-note { max-width: 1440px; margin: 12px auto 0; padding: 10px 14px; border: 1px solid var(--line);
+  #demo-note { max-width: 1840px; margin: 12px auto 0; padding: 10px 14px; border: 1px solid var(--line);
                border-left: 3px solid var(--accent); border-radius: 8px; background: var(--panel);
                font-size: 13px; line-height: 1.5; }
   #demo-note[hidden] { display: none; }
