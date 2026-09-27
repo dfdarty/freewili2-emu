@@ -445,7 +445,7 @@
     },
     hello_sdcard: {
       what: 'Reads and writes the SD card, which belongs to the MAIN processor, over the OneWili link.',
-      see: 'The app creates /owlog, appends lines to run.txt, reads the file back and lists the folder. The SD light on the header strip under the device flickers while it works.',
+      see: 'The app creates /owlog, appends lines to run.txt, reads the file back and lists the folder, which takes about 20 s. The SD light on the header strip under the device flickers while it works.',
       tryit: [
         { label: 'Run it again', run: () => location.reload(), text: '— in the browser the card lives in memory and starts empty on every load; in a native build it is a real folder (./sdcard) that keeps its files.' },
       ],
