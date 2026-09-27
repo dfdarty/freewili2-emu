@@ -52,9 +52,9 @@ them stops happening, hwcheck warns so the list can be updated.
 
 ## Planned order
 
-1. **Second core** — `retrochat`.
-2. **Infrared** — `hello_ir`.
-3. **CC1101**, then **USB host** and **DVI**.
+1. **The second core** — `retrochat`. This is next.
+2. **The radios** — infrared (`hello_ir`), then the CC1101 (`hello_cc1101`).
+3. **USB host** and **DVI**.
 4. **More of the MAIN CPU** over OneWili (CAN, analog inputs, the bus
    bridges): the link is in place, and each one is a new set of commands in
    `emu/src/dev_main.c`.

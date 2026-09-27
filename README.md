@@ -28,18 +28,25 @@ cmake -S . -B build -G Ninja && cmake --build build
 build/bin/hello_display                 # a WiliBSP example app, in a window
 ```
 
-Your own app, from folder to hardware check:
+Your own app, from folder to hardware check. It starts from WiliBSP's
+template, which logs `app: power zones ready` once it is up:
 
 ```sh
-cp -r third_party/wilibsp/apps/template apps/my_app && sed -i 's/\btemplate\b/my_app/g' apps/my_app/CMakeLists.txt
-tools/fw2emu run apps/my_app                                           # build and run it
-tools/fw2emu run apps/my_app --headless --script apps/my_app/test.txt  # test it (script with `expect` lines)
-tools/fw2emu hwcheck apps/my_app                                       # check it fits the real chip
+mkdir -p apps/hello_mine && cp -r third_party/wilibsp/apps/template/. apps/hello_mine/
+sed -i 's/\btemplate\b/hello_mine/g' apps/hello_mine/CMakeLists.txt
+cat > apps/hello_mine/test.txt <<'EOF'
+wait 3000
+expect "power zones ready"
+quit
+EOF
+tools/fw2emu run apps/hello_mine --run-ms 5000        # build and run it (5 s; without --run-ms, until you close it)
+tools/fw2emu run apps/hello_mine --headless --script apps/hello_mine/test.txt && echo PASS
+tools/fw2emu hwcheck --fetch-toolchain apps/hello_mine   # check it fits the real chip
 ```
 
 The [first-app tutorial](https://dfdarty.github.io/freewili2-emu/first-app/)
-writes `test.txt`. No display (SSH, a container)? The emulator notices and
-runs headless; `--headless` says so explicitly.
+goes further: buttons, LEDs, and `expect` on the app's own output. No
+display (SSH, a container)? The emulator notices and runs headless.
 
 - `hwcheck` needs Arm GCC: `--fetch-toolchain` downloads the Arm GNU
   Toolchain 14.2.Rel1 that WiliBSP uses, or install the distribution's
@@ -48,7 +55,7 @@ runs headless; `--headless` says so explicitly.
   `docker build -t freewili2-emu .`
 
 It can't run `.uf2` files (apps are rebuilt from source), and it doesn't model
-radios, USB host, DVI output or real-time performance — check those on the
+radios, the second core, USB host, DVI output or real-time performance — check those on the
 board. Or open the repository in **GitHub Codespaces** for a ready-made
 environment. See [Install and run](https://dfdarty.github.io/freewili2-emu/getting-started/).
 
@@ -59,7 +66,8 @@ environment. See [Install and run](https://dfdarty.github.io/freewili2-emu/getti
   status and 8 MB PSRAM — modelled at the bus and protocol level, so
   WiliBSP's drivers run as shipped.
 - 12 of WiliBSP's 17 example apps run, including the SD card, header GPIO
-  and VIO apps over the MAIN processor link (OneWili); radios are next. [Details](https://dfdarty.github.io/freewili2-emu/compatibility/).
+  and VIO apps over the MAIN processor link (OneWili). The second core
+  (`retrochat`) is next, then the radios. [Details](https://dfdarty.github.io/freewili2-emu/compatibility/).
 - WiliBSP's `fw.py press / touch / type / screenshot` work against it over RTT,
   for apps that call `agentio_init()` (as on the board).
 - `fw2emu hwcheck` builds your app with the real Pico SDK and Arm GCC and

@@ -25,7 +25,7 @@ Toolchain 14.2.Rel1 that WiliBSP builds with, for exact numbers.
 2. When it opens, build and run an app from the terminal:
 
     ```sh
-    tools/fw2emu run third_party/wilibsp/apps/hello_display --run-ms 5000 --shot-on-exit shot.png
+    tools/fw2emu run third_party/wilibsp/apps/hello_display --run-ms 5000 --shot-on-exit out/shot.png
     tools/fw2emu web third_party/wilibsp/apps/hello_display    # then open the forwarded port
     ```
 

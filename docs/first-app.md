@@ -115,19 +115,23 @@ press OK
 expect "count=2"   # passes when the app logs it; fails the run after 2 s
 press GREEN
 wait 300
-screenshot my_app.png device
+screenshot out/my_app.png device
 quit
 ```
 
 ```sh
 tools/fw2emu run apps/my_app --headless --script apps/my_app/test.txt
-echo $?            # 0: every expect matched; 1: one timed out
+echo $?            # 0 passed, 1 an expect failed, 2 a mistake in the script
 ```
 
 `expect` waits for a `DIAG()` (or emulator) line matching a regular
 expression. If none arrives in time the run stops with exit status 1 and
-says which line failed, so the script is a pass/fail test. `my_app.png` is
-the whole front panel, LEDs included. [Input scripts](scripting.md) has
+says which line failed, so the script is a pass/fail test. Exit status 2
+means the script itself (or a command-line option) has an error, for
+example an unknown command or a word where a number should be. The
+emulator prints the reason as `FATAL: script line N: …`. `# comments` can
+follow any command. `out/my_app.png` is the whole front panel, LEDs
+included; `out/` is created if needed. [Input scripts](scripting.md) has
 every command, including touches and sensor changes.
 
 `tests/smoke.sh` also runs `apps/<app>/test.txt` for every app in `apps/`,
@@ -153,21 +157,37 @@ three calls, on the board and in the emulator alike:
     }
 ```
 
-Then run the app with `--rtt` and drive it from the repository root:
+Then start the app with `--rtt` in the background. `tools/fw2emu run`
+builds first, so wait until it is serving RTT before you use `fw.py`:
 
 ```sh
 tools/fw2emu run apps/my_app --rtt &
+tools/fw2emu wait-rtt              # returns once the app is up (prints "RTT is up")
+```
+
+Then drive it from the repository root:
+
+```sh
 python3 third_party/wilibsp/tools/fw.py press ok
 python3 third_party/wilibsp/tools/fw.py screenshot -o shot.png
+kill %1                            # stop the app
 ```
+
+If `fw.py` connects while the app is still starting, the emulator holds the
+command until the app has called `agentio_init()`, so pasting both blocks
+at once works too.
 
 See [WiliBSP's agent tools](wilibsp-tools.md).
 
 ## 6. Check it fits the real chip
 
 ```sh
-tools/fw2emu hwcheck apps/my_app
+tools/fw2emu hwcheck --fetch-toolchain apps/my_app
 ```
+
+`--fetch-toolchain` downloads the Arm GNU Toolchain 14.2.Rel1 that WiliBSP
+builds with the first time (about 150 MB, into `~/.cache/fw2emu`); leave it
+off to use an Arm GCC you have installed.
 
 This builds the app with the real Pico SDK and Arm GCC and reports its SRAM
 image, RAM, PSRAM and worst-case stack against the RP2350's limits — the
@@ -180,9 +200,11 @@ things the emulator itself can't tell you. It also leaves the real UF2 in
 WiliBSP's own starting point works the same way:
 
 ```sh
-cp -r third_party/wilibsp/apps/template apps/my_app
-sed -i 's/\btemplate\b/my_app/g' apps/my_app/CMakeLists.txt
+mkdir -p apps/my_template_app && cp -r third_party/wilibsp/apps/template/. apps/my_template_app/
+sed -i 's/\btemplate\b/my_template_app/g' apps/my_template_app/CMakeLists.txt
+tools/fw2emu run apps/my_template_app --run-ms 5000
 ```
 
-Inside a WiliBSP checkout, `fw new-app my_app` does the same copy and
-rename.
+The target name has to match the folder name everywhere in
+`CMakeLists.txt`, which is what the `sed` line does. Inside a WiliBSP
+checkout, `fw new-app NAME` does the same copy and rename.

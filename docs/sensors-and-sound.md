@@ -85,7 +85,7 @@ per-mic sliders.
 ## Audio out
 
 Whatever the app plays through the codec comes out of your PC's speakers
-(`--mute` turns that off) and can be recorded with `--audio-out out.wav`.
+(`--mute` turns that off) and can be recorded with `--audio-out out/sound.wav`.
 The model follows the codec's registers: DAC mute and volume, and routing to
 the speaker or the headphone jack, each with its own gain. The sample rate is
 derived from the app's clock settings as on hardware (16 009 Hz with

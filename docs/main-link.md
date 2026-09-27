@@ -55,6 +55,73 @@ build/bin/hello_sdcard --sdcard none        # no card in the slot
 
 `tests/smoke.sh` gives each app a fresh card in `out/sdcard-<app>`.
 
+## Using the SD card from your app
+
+Link the OneWili client, ask for the SD Card power zone, open the link, and
+use the `ow_sd_*` calls. `tests/apps/sd_example` is this app plus a
+read-back and a listing; the test suite runs it, and it also builds for the
+board:
+
+```cmake
+add_executable(my_app main.c)
+target_link_libraries(my_app freewili2_bsp onewili_fwgui)   # the OneWili client
+fw2_display_app(my_app
+    POWER_ZONES DISPLAY SDCARD                             # SDCARD powers the card
+    VERSION 001
+    DESCRIPTION "Logs to the SD card")
+```
+
+```c
+#include "fw2.h"
+#include "platform/diag.h"
+#include "input/app_recovery_onewili.h"     /* onewili.h, onewili_sd.h + the link */
+#include <stdio.h>
+
+static ow_device dev;                       /* ~37 KB: static, never on the stack */
+
+int main(void) {
+    board_init();
+    fw2_app_recovery_init();                /* waits for the SDCARD power zone */
+    while (fw2_app_recovery_open_onewili(&dev) != OW_OK) fw2_app_recovery_sleep_ms(100);
+    fw2_app_recovery_wrap_sd();
+
+    ow_sd_mkdir(&dev, "/data");             /* fails harmlessly if it exists */
+    ow_sd_file f;
+    if (ow_sd_open(&dev, &f, "/data/log.csv", OW_SD_WRITE) == OW_OK) {
+        for (int i = 0; i < 200; i++) {     /* one small write per line: each <= 1 KB */
+            char line[32];
+            int n = snprintf(line, sizeof line, "%d,%d\n", i, i * i);
+            ow_sd_write(&f, line, (size_t)n);
+        }
+        if (ow_sd_close(&f) != OW_OK)       /* a lost write chunk shows up here */
+            DIAG("close failed (sdfs %d)\n", (int)ow_sd_last_error());
+    }
+    for (;;) { fw2_app_recovery_task(); fw2_app_recovery_sleep_ms(100); }
+}
+```
+
+Run it and the file appears in the card folder:
+
+```sh
+tools/fw2emu run apps/my_app --headless --run-ms 8000
+cat sdcard/data/log.csv
+```
+
+- **Keep each `ow_sd_write()` to 1 KB or less.** The OneWili client that
+  WiliBSP ships sends a whole write as one burst. A burst of more than a few
+  KB can overrun the MAIN CPU's receive buffer while the card is busy, and
+  `ow_sd_close()` then reports `SDFS_ERR_IO`. This happens on the board too
+  ([link timing](#link-timing)); the newer upstream client batches writes
+  for you.
+- **Always check `ow_sd_close()`.** Writes are fire-and-forget, so a lost
+  chunk shows up there, not at `ow_sd_write()`.
+- `ow_sd_get_mem()` / `ow_sd_put_mem()` read and write a whole file without
+  a handle; `ow_sd_stat()`, `ow_sd_list()`, `ow_sd_remove()` and
+  `ow_sd_rename()` need no handle either. Paths are absolute (`/data/…`),
+  and at most two files can be open at once.
+- The SD calls use little stack (about 1.1 KB worst case in `hwcheck`),
+  unlike the OneWili text commands ([below](#checking-it)).
+
 ## Header GPIO and VIO
 
 The header is level-shifted. The shifters are powered by **VIO**, which the

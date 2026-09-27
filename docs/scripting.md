@@ -2,7 +2,11 @@
 
 `--script FILE` feeds inputs on a timeline. It works with or without a
 window; with `--headless` it is the way to test apps from CI or an agent.
-One command per line; `#` starts a comment.
+One command per line. `#` starts a comment, at the start of a line or
+after a command (`press OK   # confirm`); a `#` inside double quotes, as in
+`expect "#3"`, is kept. A mistake in the script — an unknown command, a
+word where a number should be, too many arguments — stops the run with
+`FATAL: script line N: …` and exit status 2.
 
 | Command | Effect |
 |---|---|

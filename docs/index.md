@@ -33,11 +33,14 @@ app, build it with the emulator — see [Your first app](first-app.md).
 - **Test them automatically.** Script button presses, touches and sensor
   changes, take screenshots, and `expect` lines in the app's log. A missed
   `expect` fails the run, headless, in CI.
-- **Use WiliBSP's own tooling.** For apps that start WiliBSP's agentio
-  harness (`agentio_init()`, as on the board), `fw.py press`, `touch`,
-  `type` and `screenshot` work against the emulator over RTT, so WiliBSP's
-  `AGENTS.md` workflow and its Claude Code skills run without a board.
-  [What the app needs](wilibsp-tools.md#what-the-app-needs).
+- **Check it with WiliBSP's agent tools.** For apps that start WiliBSP's
+  agentio harness (`agentio_init()`, as on the board), the `fw.py` commands
+  that `AGENTS.md` uses to check an app (`press`, `hold`, `release`,
+  `touch`, `type`, `screenshot`) work against the emulator over RTT. You
+  build and run with `tools/fw2emu` rather than `fw build` / `fw flash`,
+  and read `DIAG()` output in the emulator's terminal (or with
+  `nc 127.0.0.1 9090`) rather than with `fw rtt`.
+  [Details](wilibsp-tools.md).
 - **Check that it will fit.** [`fw2emu hwcheck`](debugging.md#real-hardware-check-toolsfw2emu-hwcheck)
   builds your app with the real Pico SDK and Arm GCC and reports SRAM,
   PSRAM and worst-case stack against the chip's limits.

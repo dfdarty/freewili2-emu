@@ -17,6 +17,11 @@ OneWili client (the MAIN-CPU link) is a submodule inside WiliBSP.
 **`SDL2` not found.** Install `libsdl2-dev`, or configure with
 `-DFW2_EMU_SDL=OFF` for a headless-only build.
 
+**`ports:WARNING: using local ports: sdl2=…`** (and `not grabbing local
+port: sdl2 … is newer`), repeated for every file of the browser build.
+Emscripten prints these whenever `EMCC_LOCAL_PORTS` is set, as the dev
+container and the Dockerfile do; they are expected.
+
 **Compiler warnings from WiliBSP.** These two are expected and harmless;
 they are in WiliBSP's own sources, which the emulator compiles unmodified:
 
@@ -41,12 +46,13 @@ image.
 prints this when it looks for a Wayland session that isn't there. It's
 harmless. With no display at all (neither `DISPLAY` nor `WAYLAND_DISPLAY`
 set, as over SSH or in a container), the emulator doesn't try to open a
-window: it prints `no display … running headless` and runs headless. Older
-builds opened an invisible window instead and never ended.
+window: it prints `no display … running headless` and runs headless.
 
-**`--run-ms` or `quit` doesn't end the program.** They do in current
-builds, window or not. Only an app that ends itself (HOME held 5 s) leaves
-its window open on the last frame, and the log says so.
+**The window stays open after the app exits.** That happens when the app
+ends itself (HOME held 5 s, `main()` returning) in an interactive run, so
+the last frame can be inspected; the log says so, and closing the window
+quits. Runs with `--run-ms`, `--script` or `--shot-on-exit` always end the
+process.
 
 **`rtt: port 9090 on 127.0.0.1 is already in use`.** Another emulator (or
 OpenOCD / `fw rtt`) is already serving RTT. Stop it, or run this one without
@@ -86,7 +92,7 @@ starts OpenOCD); read the emulator's output instead.
 
 **`fw.py` fails with `RuntimeError: agentio connection closed`.** The app
 doesn't start WiliBSP's agentio harness; the emulator's log says
-`the app never called agentio_init()`. Add the three calls in
+`the app hasn't called agentio_init()`. Add the three calls in
 [WiliBSP's agent tools](wilibsp-tools.md#what-the-app-needs).
 
 **`fw.py` output files end up inside `third_party/wilibsp`.** Run it from

@@ -99,6 +99,7 @@ For building with CMake directly (`cmake -S . -B build -G Ninja -D...`):
 | `FW2_EMU_32BIT` | `OFF` | `-m32` build (native only) |
 | `FW2_EMU_SDL` | `ON` (`OFF` with `FW2_EMU_32BIT`) | window and host audio via SDL2; `OFF` builds a headless-only emulator |
 | `FW2_AGENTIO` | `ON` natively, `OFF` on the web | WiliBSP's agentio harness (needed for `fw.py screenshot`) |
+| `FW2_EMU_WEB_DEMO` | `OFF` | web page: show the note that the hosted demo runs WiliBSP's example apps only (on for the GitHub Pages build) |
 | `FW2_EMU_WEB_ENV` | `web` | Emscripten environment; `web,node` runs builds headless under Node, with the host's files visible (`--script`, `--sdcard`, screenshots) |
 
 ## The test runner

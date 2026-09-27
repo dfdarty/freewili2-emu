@@ -45,16 +45,17 @@ attaches a model to each bus, register block or wire protocol:
 
 ## Approximate
 
-- **Timing.** There is no bus timing: SPI transfers and memory-to-memory
-  DMA complete instantly, so an app that is too slow on the RP2350 can look
-  fine here. PIO audio streams (I2S, PDM) are paced at their real rates.
+- **Timing.** SPI and I2C transfers and memory-to-memory DMA complete
+  instantly, so an app that is too slow on the RP2350 can look fine here.
+  PIO audio streams (I2S, PDM) and the two UART links (the board manager at
+  62 500 baud, the MAIN CPU at 8 Mbaud) are paced at their real rates.
 - **CPU speed.** Your PC runs the app much faster than a 250 MHz Cortex-M33,
   and `sleep_ms()` waits in real time. Heavy computation, drawing and
   decoding will be slower on the board.
 - **Acoustics.** All microphones hear the same sound with no delay between
   capsules; per-mic gains are the only spatial effect.
-- **Sensors** return what you set, plus optional noise. There is no motion
-  model or temperature drift.
+- **Sensors** return what you set, to the part's resolution, plus optional
+  noise. There is no motion model or temperature drift.
 - **LED output** shows the colour data the app sends; the real LEDs'
   brightness and first-frame latch quirk are not modelled.
 - **The MAIN CPU's** response times and SD-card busy periods are estimates.
@@ -65,11 +66,11 @@ attaches a model to each bus, register block or wire protocol:
 ## Not modelled yet
 
 - Most of what the MAIN processor does beyond the SD card, header GPIO and
-  Vout: CAN, analog inputs, the UART/I2C/SPI bridges, the FPGA, and radios
-  other than the CC1101. Those OneWili commands return a failure instead of
-  hanging.
-- CC1101 sub-GHz radio, LoRa, NFC, infrared.
-- USB host, DVI output (stubbed), the second core.
+  Vout: CAN, analog inputs, the UART/I2C/SPI bridges, the FPGA and logic
+  analyzer. Those OneWili commands return a failure instead of hanging.
+- The radios: the CC1101 sub-GHz radio, LoRa, Wi-Fi/Bluetooth, NFC/RFID and
+  infrared.
+- The second core (`pico/multicore.h`), USB host, and DVI output (stubbed).
 
 See [App compatibility](compatibility.md) for how this maps onto WiliBSP's
 example apps.
