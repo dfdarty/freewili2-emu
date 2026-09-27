@@ -139,6 +139,15 @@ jobs:
           artifact-name: action-selftest
       - name: Check its output
         run: test "${{ steps.selftest.outputs.result }}" = pass
+      - name: Run the action on the starter template (examples/app-template)
+        uses: ./
+        with:
+          app: examples/app-template
+          artifact-name: action-template
+      - name: fw2emu new makes an app whose test passes
+        run: |
+          tools/fw2emu new --repo "$RUNNER_TEMP/new_app"
+          tools/fw2emu test --out "$RUNNER_TEMP/new-out" "$RUNNER_TEMP/new_app"
       # What `uses: dfdarty/freewili2-emu@REF` does in someone else's repo:
       # GitHub hands over the action without submodules, so it fetches them.
       - name: Fetch the emulator the way a remote use does

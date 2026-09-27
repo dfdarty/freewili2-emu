@@ -83,6 +83,19 @@ options. This is what the [GitHub Action](ci.md) runs; inside GitHub
 Actions a failure also becomes an annotation on the script line and a job
 summary.
 
+### `fw2emu new` — start a new app from the template
+
+```sh
+tools/fw2emu new [--repo] [--name NAME] DIR
+```
+
+Creates `DIR` with a working app (`CMakeLists.txt`, `main.c`) and its test
+(`test.txt`), named after the folder: it counts OK presses and colours the
+LEDs, and its test passes. Put it in `apps/` to have it built with
+everything else. `--repo` adds a README, a `.gitignore` and a GitHub
+workflow that tests every push, for an app in its own repository. The files
+come from `examples/app-template/`.
+
 ### `fw2emu web` — build one app for the browser and serve it
 
 ```sh

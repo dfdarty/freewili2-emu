@@ -4,6 +4,12 @@ An emulator app **is** a WiliBSP app: the same folder, the same
 `CMakeLists.txt` and the same `main.c` build for the emulator and, with
 WiliBSP's own toolchain, into a UF2 for the board.
 
+!!! tip "The quick way"
+    `tools/fw2emu new apps/my_app` creates this whole app, test included, in
+    one step. For an app in its own GitHub repository, start from
+    `tools/fw2emu new --repo ~/my_app`, which also sets up the
+    [GitHub Action](ci.md). The steps below show what's in it.
+
 ## 1. Make the folder
 
 Put it in `apps/` inside the repository, or anywhere else and use

@@ -1,0 +1,11 @@
+# my_app's test: run by `fw2emu test` and by the GitHub Action on every push.
+# Commands: https://dfdarty.github.io/freewili2-emu/scripting/
+wait 2500                  # board_init and the power-zone handshake
+expect "my_app: ready" 3000
+press OK
+press OK
+expect "count=2"           # passes when the app logs it; fails the run after 2 s
+press GREEN
+wait 300
+screenshot out/my_app.png device
+quit

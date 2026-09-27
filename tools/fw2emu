@@ -5,6 +5,7 @@
   fw2emu web APP_DIR [EMULATOR FLAGS]   build it for the browser and serve it on 127.0.0.1
   fw2emu test APP_DIR [EMULATOR FLAGS]  build it, run its test script headless, check the
                                         result (what the GitHub Action runs)
+  fw2emu new DIR [--repo]               start a new app (with a test) from the template
   fw2emu hwcheck [APP_DIR ...]          build apps for the real FREE-WILi 2 (Pico SDK +
                                         Arm GCC) and report memory use and worst-case stack
 
@@ -483,6 +484,42 @@ def cmd_run(a):
         die("gdb not found")
     print("+ " + " ".join(cmd), file=sys.stderr, flush=True)
     os.execvp(cmd[0], cmd)
+
+
+# --------------------------------------------------------------------- new
+
+TEMPLATE = os.path.join(ROOT, "examples", "app-template")
+APP_FILES = ["CMakeLists.txt", "main.c", "test.txt"]
+REPO_FILES = ["README.md", ".gitignore", os.path.join(".github", "workflows", "fw2emu.yml")]
+
+
+def cmd_new(a):
+    d = os.path.abspath(a.dir)
+    name = a.name or os.path.basename(d.rstrip(os.sep))
+    name = re.sub(r"[^A-Za-z0-9_]", "_", name)
+    if not re.match(r"[A-Za-z_]", name):
+        name = "app_" + name
+    files = APP_FILES + (REPO_FILES if a.repo else [])
+    clash = [f for f in files if os.path.exists(os.path.join(d, f))]
+    if clash:
+        die(f"{d} already has {', '.join(clash)}; pick an empty or new folder")
+    for f in files:
+        with open(os.path.join(TEMPLATE, f)) as src:
+            text = src.read().replace("my_app", name)
+        dst = os.path.join(d, f)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(dst, "w") as out:
+            out.write(text)
+    rel = os.path.relpath(d)
+    tool = os.path.relpath(os.path.join(TOOLS, "fw2emu"))
+    print(f"created app '{name}' in {rel}: " + ", ".join(files))
+    print("next:")
+    print(f"  {tool} run {rel}             # try it in a window")
+    print(f"  {tool} test {rel}            # run its test.txt")
+    if a.repo:
+        print(f"  cd {rel} && git init && git add -A && git commit -m 'New FREE-WILi 2 app'")
+        print("  push it to GitHub: the workflow tests every push (https://dfdarty.github.io/freewili2-emu/ci/)")
+    return 0
 
 
 # --------------------------------------------------------------------- test
@@ -1119,6 +1156,17 @@ def main():
     t.add_argument("--sanitize", action="store_true", help="ASan + UBSan build (FW2_EMU_SANITIZE)")
     t.add_argument("--m32", action="store_true", help="32-bit build (FW2_EMU_32BIT)")
     t.set_defaults(func=cmd_test)
+
+    n = sub.add_parser("new", help="start a new app folder (with a test) from the template",
+                       description="Create DIR with a working app (CMakeLists.txt, main.c) and its test "
+                                   "(test.txt), named after the folder. With --repo, also a README, a "
+                                   ".gitignore and a GitHub workflow that tests every push, for an app "
+                                   "that lives in its own repository. Put it in apps/ to have it built "
+                                   "with everything else.")
+    n.add_argument("dir", metavar="DIR")
+    n.add_argument("--name", help="target name (default: the folder name)")
+    n.add_argument("--repo", action="store_true", help="also README.md, .gitignore and .github/workflows/fw2emu.yml")
+    n.set_defaults(func=cmd_new)
 
     h = sub.add_parser("hwcheck", help="build for real hardware and check memory and stack",
                        description="Build apps for the real FREE-WILi 2 with the Pico SDK and Arm GCC and "

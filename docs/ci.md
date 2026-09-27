@@ -5,7 +5,15 @@ repository and every push builds the app for the emulator, runs its
 [test script](scripting.md) headless and keeps the log and screenshots. A
 failed `expect` fails the check and is marked on the script line.
 
-## Set it up
+## Start from the template
+
+`tools/fw2emu new --repo ~/my_app` creates an app folder that is ready to be
+its own repository: the app, its `test.txt`, a README and
+`.github/workflows/fw2emu.yml`. Push it to a new GitHub repository and the
+first run starts. The same files are in
+[`examples/app-template`](https://github.com/dfdarty/freewili2-emu/tree/main/examples/app-template).
+
+## Set it up by hand
 
 Your repository needs the app folder (with its `fw2_display_app()`
 `CMakeLists.txt`, as in [Your first app](first-app.md)) and a test script,
