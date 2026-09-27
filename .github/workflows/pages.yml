@@ -35,7 +35,7 @@ jobs:
           actions-cache-folder: emsdk-cache-pages
       - name: Build the emulator for the browser
         run: |
-          emcmake cmake -S . -B build-web -G Ninja -DCMAKE_BUILD_TYPE=Release
+          emcmake cmake -S . -B build-web -G Ninja -DCMAKE_BUILD_TYPE=Release -DFW2_EMU_WEB_DEMO=ON
           cmake --build build-web
       - uses: actions/setup-python@v5
         with:

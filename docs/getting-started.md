@@ -5,9 +5,13 @@ There are three ways in, from zero setup to a full local toolchain.
 ## 1. In the browser — nothing to install
 
 Open the [hosted emulator](https://dfdarty.github.io/freewili2-emu/emulator/)
-and pick an app. It runs the WiliBSP example apps, with sliders for the
-sensors and the sound in the room. To run **your own** app in a browser, use
-option 2 or 3 and `fw2emu web`.
+and pick an app, with sliders for the sensors and the sound in the room.
+
+!!! warning "Example apps only"
+    The hosted page runs WiliBSP's example apps. It can't load your own
+    code: apps are compiled from source into the emulator, so yours has to
+    be built first. Use option 2 or 3, then `fw2emu run` for a window or
+    `fw2emu web` for the same browser page with your app in it.
 
 ## 2. GitHub Codespaces — a full dev environment in a browser tab
 

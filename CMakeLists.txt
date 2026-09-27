@@ -205,6 +205,14 @@ if(EMSCRIPTEN)
     endforeach()
     string(APPEND _json "\n]\n")
     file(WRITE "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/apps.json" "${_json}")
+    # The hosted demo (GitHub Pages) shows a note that it only runs the
+    # bundled example apps; local and self-hosted builds include your apps.
+    option(FW2_EMU_WEB_DEMO "Web page: show the hosted-demo note (examples only)" OFF)
+    if(FW2_EMU_WEB_DEMO)
+        set(FW2_EMU_WEB_DEMO_HIDDEN "")
+    else()
+        set(FW2_EMU_WEB_DEMO_HIDDEN "hidden")
+    endif()
     configure_file("${CMAKE_CURRENT_SOURCE_DIR}/web/index.html"
-                   "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/index.html" COPYONLY)
+                   "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/index.html" @ONLY)
 endif()

@@ -13,7 +13,7 @@ browser.
 > not with FREE-WILi.
 
 **[Documentation](https://dfdarty.github.io/freewili2-emu/)** ·
-**[Try it in your browser](https://dfdarty.github.io/freewili2-emu/emulator/)** ·
+**[Try it in your browser](https://dfdarty.github.io/freewili2-emu/emulator/)** (WiliBSP example apps; build the emulator to test your own) ·
 [App compatibility](https://dfdarty.github.io/freewili2-emu/compatibility/)
 
 ![hello_display running in the emulator](docs/hello_display.png)

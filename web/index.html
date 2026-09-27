@@ -47,6 +47,11 @@
   input[type=range] { width: 100%; accent-color: var(--accent); }
   footer { color: var(--muted); font-size: 12px; padding: 0 20px 20px; max-width: 1240px; margin: 0 auto; }
   a { color: var(--accent); }
+  #demo-note { max-width: 1200px; margin: 12px auto 0; padding: 10px 14px; border: 1px solid var(--line);
+               border-left: 3px solid var(--accent); border-radius: 8px; background: var(--panel);
+               font-size: 13px; line-height: 1.5; }
+  #demo-note[hidden] { display: none; }
+  #demo-note code { font-size: 12px; }
   header a.docs { text-decoration: none; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
 </style>
 </head>
@@ -58,6 +63,12 @@
   <span id="desc"></span>
   <a class="docs" href="https://dfdarty.github.io/freewili2-emu/" target="_blank" rel="noopener">Docs</a>
 </header>
+<div id="demo-note" @FW2_EMU_WEB_DEMO_HIDDEN@>
+  <strong>This demo runs WiliBSP's example apps only.</strong>
+  To run and test <em>your own</em> app, build it with the emulator — in GitHub Codespaces, WSL2 or Linux —
+  using <code>tools/fw2emu run</code> or <code>tools/fw2emu web</code>.
+  <a href="https://dfdarty.github.io/freewili2-emu/first-app/">How to test your own app →</a>
+</div>
 <main>
   <div id="stage">
     <canvas id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
