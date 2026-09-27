@@ -24,11 +24,18 @@
   #desc { color: var(--muted); flex: 1 1 260px; }
   main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 16px 20px 0;
          max-width: 1480px; margin: 0 auto; align-items: start; }
-  @media (min-width: 1180px) { main { grid-template-columns: minmax(0, 900px) minmax(300px, 1fr); } }
+  @media (min-width: 1180px) {
+    main { grid-template-columns: minmax(0, 900px) minmax(300px, 1fr); align-items: stretch; }
+    /* the guide is exactly as tall as the device; longer guides scroll inside it */
+    main > aside { position: relative; }
+    main > aside > #guide { position: absolute; inset: 0; overflow-y: auto; }
+  }
   /* the controls sit under the device: 1-4 columns depending on width */
   #panels { display: grid; gap: 12px; padding: 16px 20px 24px; max-width: 1480px; margin: 0 auto;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); align-items: start; }
-  #panels #log { height: 260px; }
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            grid-auto-rows: 1fr; align-items: stretch; }   /* every panel the same height */
+  #panels .card { display: flex; flex-direction: column; min-height: 0; }
+  #panels #log { flex: 1 1 0; height: auto; min-height: 240px; }   /* fills its card, scrolls inside; never sets the row height */
   #stage { position: relative; width: 100%; max-width: 900px; aspect-ratio: 900 / 520; }
   canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated;
            border-radius: 14px; outline: none; background: #0f1115; }
