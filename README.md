@@ -75,6 +75,9 @@ environment. See [Install and run](https://dfdarty.github.io/freewili2-emu/getti
   both cores. The radios are next. [Details](https://dfdarty.github.io/freewili2-emu/compatibility/).
 - WiliBSP's `fw.py press / touch / type / screenshot` work against it over RTT,
   for apps that call `agentio_init()` (as on the board).
+- A GitHub Action for your own app repository: every push builds the app,
+  runs its test script headless and keeps the screenshots
+  ([Testing in CI](https://dfdarty.github.io/freewili2-emu/ci/)).
 - `fw2emu hwcheck` builds your app with the real Pico SDK and Arm GCC and
   reports SRAM, PSRAM and worst-case stack against the RP2350's limits.
 - Sanitizer and 32-bit builds to catch memory and pointer-size bugs before

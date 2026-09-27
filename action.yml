@@ -1,0 +1,123 @@
+name: FREE-WILi 2 emulator test
+description: Build a WiliBSP app for the FREE-WILi 2 emulator, run its test script headless, and keep the log and screenshots.
+author: dfdarty
+branding:
+  icon: cpu
+  color: green
+
+inputs:
+  app:
+    description: App folder, relative to the repository (the one with the fw2_display_app() CMakeLists.txt).
+    default: "."
+  script:
+    description: Test script. Default APP/test.txt. A SCRIPT.expect next to it is checked too.
+    default: ""
+  args:
+    description: Extra emulator flags, e.g. "--sensor-csv logs/flight.csv --board-id 0000000000000002".
+    default: ""
+  sanitize:
+    description: Build with AddressSanitizer and UBSan, to catch memory bugs.
+    default: "false"
+  hwcheck:
+    description: Also build for the real chip with the Pico SDK and Arm GCC and check image size, RAM, PSRAM and stack (adds a few minutes the first time; cached after).
+    default: "false"
+  out:
+    description: Folder, relative to the repository, for the log, the recorded audio and the SD card the app used. Screenshots go wherever the script says (usually out/).
+    default: out
+  artifact-name:
+    description: Name of the uploaded artifact (log, screenshots, audio). Default fw2emu-APPNAME. Set upload to false to skip it.
+    default: ""
+  upload:
+    description: Upload the out folder as an artifact, pass or fail.
+    default: "true"
+
+outputs:
+  result:
+    description: pass or fail
+    value: ${{ steps.test.outputs.result }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install build tools
+      shell: bash
+      run: |
+        if ! command -v ninja >/dev/null || ! command -v cmake >/dev/null; then
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends cmake ninja-build zlib1g-dev
+        fi
+
+    - name: Get the emulator
+      id: emu
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        ACTION_REPO: ${{ github.action_repository }}
+        ACTION_REF: ${{ github.action_ref }}
+      run: bash "$ACTION_PATH/tools/action-setup.sh"
+
+    - name: Cache the Pico SDK and Arm toolchain
+      if: inputs.hwcheck == 'true'
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/fw2emu
+        key: fw2emu-hw-${{ runner.os }}-${{ runner.arch }}-sdk2.3.0-gcc14.2rel1
+
+    - name: Build and run the test
+      id: test
+      shell: bash
+      env:
+        EMU: ${{ steps.emu.outputs.root }}
+        APP: ${{ inputs.app }}
+        SCRIPT: ${{ inputs.script }}
+        ARGS: ${{ inputs.args }}
+        OUT: ${{ inputs.out }}
+        SANITIZE: ${{ inputs.sanitize }}
+      run: |
+        opts=(--out "$OUT")
+        [ -n "$SCRIPT" ] && opts+=(--script "$SCRIPT")
+        if [ "$SANITIZE" = "true" ]; then
+          opts+=(--sanitize)
+          # ASan's shadow layout doesn't fit the mmap randomisation of newer runner kernels
+          sudo sysctl -qw vm.mmap_rnd_bits=28 || true
+        fi
+        # shellcheck disable=SC2086  # ARGS is a list of emulator flags
+        if python3 "$EMU/tools/fw2emu" test "${opts[@]}" "$APP" $ARGS; then
+          echo "result=pass" >> "$GITHUB_OUTPUT"
+        else
+          rc=$?
+          echo "result=fail" >> "$GITHUB_OUTPUT"
+          exit $rc
+        fi
+
+    - name: Check it fits the real chip
+      if: inputs.hwcheck == 'true' && (success() || failure())
+      shell: bash
+      env:
+        EMU: ${{ steps.emu.outputs.root }}
+        APP: ${{ inputs.app }}
+      run: |
+        python3 "$EMU/tools/fw2emu" hwcheck --fetch-toolchain --build-dir "$RUNNER_TEMP/fw2emu-hw" "$APP" \
+          | tee "$RUNNER_TEMP/hwcheck.txt"
+        rc=${PIPESTATUS[0]}
+        { echo '### FREE-WILi 2 hardware check'; echo; echo '```'; sed -n '/^FREE-WILi 2 hardware check/,$p' "$RUNNER_TEMP/hwcheck.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+        exit $rc
+
+    - name: Name the artifact
+      id: name
+      if: inputs.upload == 'true' && (success() || failure())
+      shell: bash
+      env:
+        APP: ${{ inputs.app }}
+        NAME: ${{ inputs.artifact-name }}
+      run: |
+        if [ -z "$NAME" ]; then NAME="fw2emu-$(basename "$(cd "$APP" && pwd)")"; fi
+        echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+    - name: Upload the log and screenshots
+      if: inputs.upload == 'true' && (success() || failure())
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ steps.name.outputs.name }}
+        path: ${{ inputs.out }}
+        if-no-files-found: warn

@@ -55,6 +55,7 @@ nav:
       - Sensors and sound: sensors-and-sound.md
       - The MAIN processor link: main-link.md
       - WiliBSP's agent tools: wilibsp-tools.md
+      - Testing in CI (GitHub Action): ci.md
   - Trusting the results:
       - Debugging and hardware checks: debugging.md
       - Accuracy and known differences: accuracy.md

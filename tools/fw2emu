@@ -3,6 +3,8 @@
 
   fw2emu run APP_DIR [EMULATOR FLAGS]   build one app folder for the emulator and run it
   fw2emu web APP_DIR [EMULATOR FLAGS]   build it for the browser and serve it on 127.0.0.1
+  fw2emu test APP_DIR [EMULATOR FLAGS]  build it, run its test script headless, check the
+                                        result (what the GitHub Action runs)
   fw2emu hwcheck [APP_DIR ...]          build apps for the real FREE-WILi 2 (Pico SDK +
                                         Arm GCC) and report memory use and worst-case stack
 
@@ -483,6 +485,145 @@ def cmd_run(a):
     os.execvp(cmd[0], cmd)
 
 
+# --------------------------------------------------------------------- test
+
+
+def check_expect(path, log_text, sdcard):
+    """The .expect rules tests/smoke.sh uses: one regex per line the log must match,
+    '!REGEX' it must not, '@sd PATH REGEX' for a file the app left on its SD card.
+    Returns a list of failure messages."""
+    fails = []
+    with open(path) as f:
+        for raw in f:
+            rule = raw.rstrip("\n")
+            if not rule.strip() or rule.startswith("#"):
+                continue
+            if rule.startswith("@sd "):
+                parts = rule.split(None, 2)
+                if len(parts) != 3:
+                    fails.append(f"{os.path.basename(path)}: bad rule '{rule}'")
+                    continue
+                fpath = os.path.join(sdcard, parts[1])
+                try:
+                    with open(fpath, errors="replace") as sf:
+                        ok = re.search(parts[2], sf.read(), re.M) is not None
+                except OSError:
+                    ok = False
+                if not ok:
+                    fails.append(f"SD file {parts[1]} lacks /{parts[2]}/")
+            elif rule.startswith("!"):
+                if re.search(rule[1:], log_text, re.M):
+                    fails.append(f"log has /{rule[1:]}/")
+            elif not re.search(rule, log_text, re.M):
+                fails.append(f"log lacks /{rule}/")
+    return fails
+
+
+def _gh_escape(t):
+    return t.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def cmd_test(a):
+    # argparse hands everything after APP_DIR to the emulator; take this
+    # command's own options back out of it, so their order doesn't matter.
+    rest, i = [], 0
+    ea = a.emu_args[1:] if a.emu_args[:1] == ["--"] else a.emu_args
+    while i < len(ea):
+        k = ea[i]
+        if k in ("--script", "--out", "--timeout", "--build-dir") and i + 1 < len(ea):
+            v = ea[i + 1]
+            setattr(a, k[2:].replace("-", "_"), float(v) if k == "--timeout" else v)
+            i += 2
+            continue
+        if k in ("--sanitize", "--m32"):
+            setattr(a, k[2:], True)
+            i += 1
+            continue
+        rest.append(k)
+        i += 1
+    a.emu_args = rest
+    app_dir = os.path.abspath(a.app)
+    script = os.path.abspath(a.script or os.path.join(app_dir, "test.txt"))
+    if not os.path.isfile(script):
+        die(f"no test script: {script} does not exist (add test.txt to the app folder or pass --script)")
+    cmake_args, suffix = ["-DFW2_EMU_SDL=OFF"], ""
+    if a.sanitize:
+        cmake_args.append("-DFW2_EMU_SANITIZE=ON"); suffix += "-asan"
+    if a.m32:
+        cmake_args.append("-DFW2_EMU_32BIT=ON"); suffix += "-m32"
+    build = os.path.abspath(a.build_dir or os.path.join(ROOT, "build-test" + suffix))
+    target, bindir = build_one_app(app_dir, build, cmake_args)
+    out = os.path.abspath(a.out)
+    os.makedirs(out, exist_ok=True)
+    sdcard = os.path.join(out, f"sdcard-{target}")
+    shutil.rmtree(sdcard, ignore_errors=True)
+    log_path = os.path.join(out, f"{target}.log")
+    args = a.emu_args[1:] if a.emu_args[:1] == ["--"] else a.emu_args
+    cmd = [os.path.join(bindir, target), "--headless", "--script", script, "--sdcard", sdcard,
+           "--audio-out", os.path.join(out, f"{target}.wav")] + args
+    print("+ " + " ".join(cmd), file=sys.stderr, flush=True)
+    lines, timed_out = [], False
+    with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                          errors="replace") as p:
+        import threading
+        timer = threading.Timer(a.timeout, p.kill)
+        timer.start()
+        try:
+            for line in p.stdout:
+                sys.stdout.write(line)
+                lines.append(line)
+        finally:
+            timer.cancel()
+        rc = p.wait()
+        timed_out = rc < 0 and not any("run ended" in l for l in lines)
+    log_text = "".join(lines)
+    with open(log_path, "w") as f:
+        f.write(log_text)
+
+    fails = []
+    if timed_out:
+        fails.append(f"no result within {a.timeout:.0f} s (does the script end with quit?)")
+    elif rc != 0:
+        why = next((l.strip() for l in lines if re.search(r"FATAL|FAIL script|FAIL --shot", l)), None)
+        fails.append(re.sub(r"^\[emu\] ", "", why) if why else f"the emulator exited with status {rc}")
+    expect = os.path.splitext(script)[0] + ".expect"
+    if not fails and os.path.isfile(expect):
+        fails += check_expect(expect, log_text, sdcard)
+
+    shots = re.findall(r"script: screenshot -> (\S+)", log_text)
+    perf = [l.split("perf: ", 1)[1].strip() for l in lines if "perf: " in l]
+    status = 2 if rc == 2 else (1 if fails else 0)
+    rel = os.path.relpath(script)
+    if fails:
+        print(f"\nfw2emu test: FAIL {target} ({rel})", file=sys.stderr)
+        for f in fails:
+            print(f"  {f}", file=sys.stderr)
+    else:
+        print(f"\nfw2emu test: PASS {target} ({rel})", file=sys.stderr)
+    print(f"  log: {os.path.relpath(log_path)}", file=sys.stderr)
+    for s_ in shots:
+        print(f"  screenshot: {s_}", file=sys.stderr)
+
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        for f in fails:
+            m = re.search(r"script line (\d+)", f)
+            loc = f"file={rel},line={m.group(1)}," if m else f"file={rel},"
+            print(f"::error {loc}title=fw2emu test {target}::{_gh_escape(f)}", flush=True)
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary, "a") as f:
+            f.write(f"### {'✅' if not fails else '❌'} FREE-WILi 2 emulator: `{target}`\n\n")
+            f.write(f"Script `{rel}`: **{'passed' if not fails else 'failed'}**\n\n")
+            for x in fails:
+                f.write(f"- {x}\n")
+            if shots:
+                f.write("\nScreenshots (in the workflow's artifact): " + ", ".join(f"`{x}`" for x in shots) + "\n")
+            if perf:
+                f.write(f"\nLast bus readout: `{perf[-1]}`\n")
+            f.write("\n")
+    return status
+
+
 class _Handler(http.server.SimpleHTTPRequestHandler):
     extensions_map = dict(http.server.SimpleHTTPRequestHandler.extensions_map,
                           **{".wasm": "application/wasm", ".js": "text/javascript"})
@@ -959,6 +1100,25 @@ def main():
     w.add_argument("--port", type=int, default=8080, help="default: 8080")
     w.add_argument("--no-serve", action="store_true", help="build only")
     w.set_defaults(func=cmd_web)
+
+    t = sub.add_parser("test", help="build one app folder, run its test script headless and check it",
+                       description="Build APP_DIR for the emulator (headless, no SDL needed), run it with its "
+                                   "test script (default APP_DIR/test.txt) and check the result: the script's "
+                                   "expect lines, and SCRIPT.expect next to the script if there is one (the "
+                                   "rules tests/smoke.sh uses). The log, the recorded audio and a fresh SD card "
+                                   "folder go to --out. Exit status 0 passed, 1 failed, 2 a mistake in the "
+                                   "script or options. Flags after APP_DIR go to the emulator (e.g. "
+                                   "--sensor-csv FILE). In GitHub Actions, failures become annotations and a "
+                                   "job summary.")
+    t.add_argument("app", metavar="APP_DIR")
+    t.add_argument("emu_args", nargs=argparse.REMAINDER, metavar="EMULATOR FLAGS")
+    t.add_argument("--script", help="default: APP_DIR/test.txt")
+    t.add_argument("--out", default="out", help="folder for the log, audio and SD card (default: out/)")
+    t.add_argument("--timeout", type=float, default=300, help="seconds before the run is stopped (default 300)")
+    t.add_argument("--build-dir", help="default: build-test/ (build-test-asan/ etc.)")
+    t.add_argument("--sanitize", action="store_true", help="ASan + UBSan build (FW2_EMU_SANITIZE)")
+    t.add_argument("--m32", action="store_true", help="32-bit build (FW2_EMU_32BIT)")
+    t.set_defaults(func=cmd_test)
 
     h = sub.add_parser("hwcheck", help="build for real hardware and check memory and stack",
                        description="Build apps for the real FREE-WILi 2 with the Pico SDK and Arm GCC and "

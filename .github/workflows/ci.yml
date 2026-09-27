@@ -122,6 +122,35 @@ jobs:
           path: out/hwcheck*.json
           if-no-files-found: ignore
 
+  action:
+    name: GitHub Action (action.yml)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Run the action from this checkout on a self-test app
+        id: selftest
+        uses: ./
+        with:
+          app: tests/apps/script_check
+          script: tests/scripts/script_check.txt
+          artifact-name: action-selftest
+      - name: Check its output
+        run: test "${{ steps.selftest.outputs.result }}" = pass
+      # What `uses: dfdarty/freewili2-emu@REF` does in someone else's repo:
+      # GitHub hands over the action without submodules, so it fetches them.
+      - name: Fetch the emulator the way a remote use does
+        if: github.event_name == 'push'
+        env:
+          ACTION_PATH: ${{ runner.temp }}/_actions/${{ github.repository }}/${{ github.sha }}
+          ACTION_REPO: ""
+          ACTION_REF: ""
+        run: |
+          mkdir -p "$ACTION_PATH"
+          bash tools/action-setup.sh
+          test -f "$RUNNER_TEMP/freewili2-emu/third_party/wilibsp/libs/onewili/CMakeLists.txt"
+
   web:
     name: web build (Emscripten 4.0.15)
     runs-on: ubuntu-24.04

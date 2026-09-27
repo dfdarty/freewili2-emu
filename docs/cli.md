@@ -66,6 +66,23 @@ the repository or not. Only that app is configured, in its own build folder
 | `--debug` | `CMAKE_BUILD_TYPE=Debug` |
 | `--gdb` | Debug build, started under gdb with a breakpoint in the app's `main` |
 
+### `fw2emu test` — build one app, run its test and check it
+
+```sh
+tools/fw2emu test [--script FILE] [--out DIR] [--timeout S] [--sanitize] [--m32] APP_DIR [emulator options]
+```
+
+Builds the app headless (no SDL needed, in `build-test/`), runs it with its
+[input script](scripting.md) — `APP_DIR/test.txt` unless `--script` says
+otherwise — and checks the result: the script's `expect` lines, and
+`SCRIPT.expect` next to the script if there is one (the same rules as
+[the test runner](#the-test-runner)). It prints PASS or FAIL with the
+reason, and leaves the log, the recorded audio and the SD card the app used
+in `out/`. Exit status 0 passed, 1 failed, 2 a mistake in the script or the
+options. This is what the [GitHub Action](ci.md) runs; inside GitHub
+Actions a failure also becomes an annotation on the script line and a job
+summary.
+
 ### `fw2emu web` — build one app for the browser and serve it
 
 ```sh

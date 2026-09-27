@@ -134,8 +134,10 @@ follow any command. `out/my_app.png` is the whole front panel, LEDs
 included; `out/` is created if needed. [Input scripts](scripting.md) has
 every command, including touches and sensor changes.
 
-`tests/smoke.sh` also runs `apps/<app>/test.txt` for every app in `apps/`,
-so your test runs with WiliBSP's examples, in CI too.
+`tools/fw2emu test apps/my_app` does the same in one step and says PASS or
+FAIL. `tests/smoke.sh` also runs `apps/<app>/test.txt` for every app in
+`apps/`, so your test runs with WiliBSP's examples. To run it on every push
+of your own repository, use the [GitHub Action](ci.md).
 
 ## 5. Optional: make it drivable by WiliBSP's agent tools
 
