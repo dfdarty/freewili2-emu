@@ -1,0 +1,62 @@
+name: Emulator bug
+description: The emulator crashes, misbehaves, or differs from a real FREE-WILi 2.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! This project is **unofficial**: please report emulator problems here, not to FREE-WILi.
+        If you have a real board and the app misbehaves *there too*, it's probably a WiliBSP or app issue instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, and what the emulator did instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: The command you ran (or the browser URL), and the app. An input script that shows the problem is the best reproduction — `--record FILE` writes one for you.
+      placeholder: |
+        tools/fw2emu run third_party/wilibsp/apps/hello_display -v
+        # or: https://dfdarty.github.io/freewili2-emu/emulator/?app=hello_display
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log output
+      description: Run with `-v` and paste the output (or attach the log from `out/` or the Action's artifact).
+      render: text
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      multiple: true
+      options:
+        - Native (Linux)
+        - WSL2 on Windows
+        - GitHub Codespaces / dev container
+        - Browser (hosted demo)
+        - Browser (fw2emu web)
+        - Docker
+        - GitHub Action
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Emulator version
+      description: A release (v1.0.0), or the commit (`git rev-parse --short HEAD`).
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Checked on a real FREE-WILi 2?
+      options:
+        - "No board to check on"
+        - "Yes: the board behaves differently (an accuracy bug)"
+        - "Yes: the board does the same"

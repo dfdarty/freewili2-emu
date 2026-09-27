@@ -12,7 +12,10 @@ This is an **unofficial** project, not affiliated with FREE-WILi LLC.
 
 A good report has the command you ran, the output with `-v`, and — if you can —
 a small [input script](scripting.md) that shows the problem, since that
-reproduces it exactly.
+reproduces it exactly. The issue form asks for these.
+
+What changed in each release is in the
+[changelog](https://github.com/dfdarty/freewili2-emu/blob/main/CHANGELOG.md).
 
 ## How the code is organised
 
@@ -41,6 +44,8 @@ docs/               this site
 - **Fail like the hardware.** If a part is unpowered or misconfigured, the
   model should behave as the real part would (no ACK, no data, DC output), not
   helpfully work anyway.
+- **Note it in the changelog.** Add a line under *Unreleased* in
+  `CHANGELOG.md` for anything a user would notice.
 - **Keep the tests green.** `tests/smoke.sh` must pass natively; CI also
   runs the sanitizer, 32-bit, hwcheck and web builds.
 

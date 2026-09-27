@@ -1,0 +1,16 @@
+name: Feature or missing part
+description: Something the emulator should model or do — a part, a WiliBSP app that doesn't run yet, a tool.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What you'd like
+      description: For a part, which one and which WiliBSP driver or app uses it. For a tool, what you're trying to do.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What it would let you do
+      description: The app or test you have in mind helps decide what comes first.

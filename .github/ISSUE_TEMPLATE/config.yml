@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: A problem on a real FREE-WILi 2 (not the emulator)
+    url: https://github.com/freewili/wilibsp/issues
+    about: Report WiliBSP or hardware problems to FREE-WILi, once you have reproduced them on a real board. This project is unofficial.
+  - name: Documentation
+    url: https://dfdarty.github.io/freewili2-emu/
+    about: Install, first app, scripting, the GitHub Action, and what the emulator does and doesn't model.
