@@ -62,8 +62,9 @@ attaches a model to each bus, register block or wire protocol:
   decoding will be slower on the board.
 - **Acoustics.** All microphones hear the same sound with no delay between
   capsules; per-mic gains are the only spatial effect.
-- **Sensors** return what you set, to the part's resolution, plus optional
-  noise. There is no motion model or temperature drift.
+- **Sensors** return what you set or [play from a log](sensors-and-sound.md#playing-a-sensor-log),
+  to the part's resolution, plus optional noise. There is no physics: a
+  log is played as recorded, and nothing drifts on its own.
 - **LED output** shows the colour data the app sends; the real LEDs'
   brightness and first-frame latch quirk are not modelled.
 - **The MAIN CPU's** response times and SD-card busy periods are estimates.

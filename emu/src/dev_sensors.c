@@ -105,6 +105,7 @@ static bool sht_write(emu_i2c_device_t *d, const uint8_t *b, size_t n, bool nost
     if (!n) return true;
     switch (b[0]) {
     case 0xFD: case 0xF6: case 0xE0: {       /* measure: high / medium / low precision */
+        emu_sensor_play_task();
         float t = W.temp_c + jitter(0.05f), rh = W.rh_pct + jitter(0.3f);
         sht_word(&SHT.pending[0], clamp_u16((t + 45.0f) * 65535.0f / 175.0f));
         sht_word(&SHT.pending[3], clamp_u16((rh + 6.0f) * 65535.0f / 125.0f));
@@ -151,6 +152,7 @@ static uint8_t opt4001_crc(uint8_t e, uint32_t m, uint8_t c) {
 }
 
 static uint16_t opt_reg(uint8_t r) {
+    emu_sensor_play_task();
     float lux = W.lux + jitter(W.lux * 0.01f + 0.05f);
     if (lux < 0) lux = 0;
     uint64_t codes = (uint64_t)llroundf(lux / 437.5e-6f);
@@ -205,6 +207,7 @@ static int16_t s16(float v, float full) {
 }
 
 static uint16_t imu_reg(uint8_t r) {
+    emu_sensor_play_task();
     bool acc_on = ((IMU.acc_conf >> 12) & 7) != 0, gyr_on = ((IMU.gyr_conf >> 12) & 7) != 0;
     float ga = (float)acc_range_g(), gg = (float)gyr_range_dps();
     switch (r) {
@@ -262,6 +265,7 @@ static void put24(uint8_t *o, int32_t v) {
 }
 
 static void mag_sample(uint8_t out[12]) {
+    emu_sensor_play_task();
     const float adc_gain = 1.0f / 1.5f, lut_gain = 0.714607238769531f, power = 1000000.0f / 1048576.0f;
     const float LSB_XY = power / (14.55f * 19.46f * adc_gain * lut_gain);
     const float LSB_Z  = power / (9.0f * 31.0f * adc_gain * lut_gain);

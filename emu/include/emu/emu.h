@@ -166,6 +166,12 @@ void emu_sensors_init(void);
 bool emu_sensor_set(const char *name, int n, const float *v);
 bool emu_sensor_set_str(const char *spec);          /* "lux=300" "accel=0,0,1" */
 void emu_sensor_describe(char *out, size_t cap);
+/* Sensor-log playback (sensor_play.c): a CSV, or "@launch" (built in).
+ * Returns NULL, or why it can't play. */
+const char *emu_sensor_play(const char *path, bool loop, bool step);
+void emu_sensor_play_stop(void);
+void emu_sensor_play_task(void);                    /* apply the log at the current time */
+bool emu_sensor_playing(void);
 
 /* Audio: NAU88C10 codec, I2S program model, host output, mic sources */
 void  emu_audio_init(void);

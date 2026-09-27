@@ -1,0 +1,6 @@
+# tests/scripts/hello_sensors.txt: face up, then face down after 1 s (held
+# with `step`), with the light going out at the same moment.
+t_ms, ax, ay, az, lux
+0,    0,  0,  1,  800
+1000, 0,  0,  -1, 0
+2000, 0,  0,  -1, 0

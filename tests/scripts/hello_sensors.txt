@@ -7,4 +7,13 @@ set tilt 30 0
 set mag 10 -20 -35
 wait 1500
 screenshot out/hello_sensors.png
+# sensor-log playback: a CSV, stepped, then the built-in rocket flight
+play tests/data/flip.csv step
+expect "acc=0,0,1000 milli-g" 1500
+expect "acc=0,0,-1000 milli-g" 2500
+expect "playback of tests/data/flip.csv finished" 2500
+play @launch
+expect "acc=-?[0-9]+,-?[0-9]+,3999 milli-g" 5000   # boost: clipped at the driver's +-4 g
+expect "acc=-?[0-9]+,-?[0-9]+,-[1-6][0-9][0-9] milli-g" 3000   # coasting: drag
+play stop
 quit

@@ -167,6 +167,8 @@ static long opt_ms(const char *t, long dflt, const char *cmd, int ln) {
     return v;
 }
 
+static bool s_from_web;              /* a command from the page: errors are logged, not fatal */
+
 static void exec(char *line, uint64_t now) {
     char raw[512];
     snprintf(raw, sizeof raw, "%s", line);
@@ -240,6 +242,20 @@ static void exec(char *line, uint64_t now) {
             emu_fatal("script line %d: set NAME V [V V V] (temp rh lux accel gyro mag tilt noise mics mic.A-D "
                       "tone miclevel gpioN vrefext)", ln + 1);
         if (emu_verbose) { char d[160]; emu_sensor_describe(d, sizeof d); emu_log("sensors: %s", d); }
+    } else if (!strcmp(cmd, "play")) {
+        ARGS(1, 3, "play FILE|@launch [loop] [step]  /  play stop");
+        if (!strcmp(t[1], "stop") && nargs == 1) { emu_sensor_play_stop(); return; }
+        bool loop = false, step = false;
+        for (int i = 2; i <= nargs; i++) {
+            if (!strcmp(t[i], "loop")) loop = true;
+            else if (!strcmp(t[i], "step")) step = true;
+            else emu_fatal("script line %d: play: '%s' is not loop or step", ln + 1, t[i]);
+        }
+        const char *err = emu_sensor_play(t[1], loop, step);
+        if (err) {
+            if (s_from_web) emu_log("play: %s", err);
+            else emu_fatal("script line %d: play %s", ln + 1, err);
+        }
     } else if (!strcmp(cmd, "log")) {
         const char *rest = raw + 3;
         while (*rest == ' ' || *rest == '\t') rest++;
@@ -286,12 +302,14 @@ bool emu_script_exec_line(const char *line) {
     while (*p == ' ') p++;
     strip_comment(p);
     if (!*p || !strncmp(p, "wait", 4) || !strncmp(p, "quit", 4)) return false;
-    static const char *const ok[] = { "press", "hold", "release", "touch", "drag", "set", "log", "screenshot", "header" };
+    static const char *const ok[] = { "press", "hold", "release", "touch", "drag", "set", "log", "screenshot", "header", "play" };
     bool known = false;
     for (size_t i = 0; i < sizeof ok / sizeof ok[0]; i++)
         if (!strncmp(p, ok[i], strlen(ok[i]))) known = true;
     if (!known) return false;
+    s_from_web = true;
     exec(p, emu_time_us());
+    s_from_web = false;
     return true;
 }
 

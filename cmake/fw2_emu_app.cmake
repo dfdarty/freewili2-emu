@@ -79,7 +79,7 @@ function(fw2_display_app target)
             "-sSTACK_SIZE=1048576"
             "-sEXIT_RUNTIME=0"
             "-sENVIRONMENT=${FW2_EMU_WEB_ENV}"
-            "-sEXPORTED_RUNTIME_METHODS=callMain"
+            "-sEXPORTED_RUNTIME_METHODS=callMain,FS"
             "-sINVOKE_RUN=1")
         if(FW2_EMU_WEB_ENV MATCHES "node")
             # Under Node the emulator mounts the host's files (--script, --sdcard, screenshots).

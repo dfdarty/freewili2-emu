@@ -45,7 +45,8 @@ The browser version adds a guide beside the device and a row of panels under it 
   "used by this app" and listed first in the panels under the device. Your own apps get a
   short general guide.
 - **Sensors:** temperature, humidity, light, pitch, roll and compass heading,
-  plus sensor noise.
+  plus sensor noise. **Rocket launch** plays the built-in flight, and **Play a
+  CSV…** plays your own [sensor log](sensors-and-sound.md#playing-a-sensor-log).
 - **Sound in the room:** a test tone and each microphone's pickup, in their
   physical order (D, B, A, C from left to right).
 - **GPIO header inputs:** drive the MAIN processor's header pins from

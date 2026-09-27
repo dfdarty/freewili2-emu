@@ -66,6 +66,11 @@
   #demo-note[hidden] { display: none; }
   #demo-note code { font-size: 12px; }
   .pins { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  .play { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .play button, .play .file { font-size: 12px; padding: 3px 9px; }
+  .play .file { color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+  .play .file:hover { border-color: #3d4450; }
+  .play .file input { display: none; }
   .pins button { padding: 3px 0; width: 42px; font-size: 12px; }
   .pins button.hi { border-color: #4a86e8; background: #1d3050; }
   .pins button.lo { border-color: #4a86e8; }
@@ -135,6 +140,12 @@
     <h2>Sensors</h2>
     <p class="hint">What the on-board sensors measure. Move a slider and the app reads the new value over I2C, exactly as its driver would on the board.</p>
     <div class="sl" id="sensors"></div>
+    <div class="play">
+      <button type="button" id="play-launch">▶ Rocket launch</button>
+      <label class="file"><input type="file" id="play-file" accept=".csv,text/csv,text/plain">▶ Play a CSV…</label>
+      <button type="button" id="play-stop">■ Stop</button>
+    </div>
+    <p class="hint" style="margin-top:8px">Plays a time-stamped sensor log into the sensors; the sliders keep your own settings meanwhile. Columns: <code>t</code> or <code>t_ms</code>, then any of temp, rh, lux, ax ay az, gx gy gz, mx my mz, pitch roll. <a href="https://dfdarty.github.io/freewili2-emu/sensors-and-sound/#playing-a-sensor-log" target="_blank" rel="noopener">Format</a></p>
   </div>
   <div class="card" id="card-sound">
     <h2>Sound in the room</h2>
@@ -224,6 +235,16 @@
   // ---- sensor sliders -> emulator commands (script syntax, see docs/scripting.md)
   Module.fw2Commands = [];
   const send = cmd => Module.fw2Commands.push(cmd);
+  document.getElementById('play-launch').addEventListener('click', () => send('play @launch'));
+  document.getElementById('play-stop').addEventListener('click', () => send('play stop'));
+  document.getElementById('play-file').addEventListener('change', async ev => {
+    const f = ev.target.files[0];
+    if (!f) return;
+    const path = '/sensor-log.csv';
+    Module.FS.writeFile(path, new Uint8Array(await f.arrayBuffer()));
+    send(`play ${path}`);
+    ev.target.value = '';
+  });
 
   // Start from the emulator's own defaults (emu/src/dev_sensors.c, dev_pdm.c)
   // and from any --sensor NAME=V,V in ?args=, so the page shows what the model holds.
@@ -425,6 +446,7 @@
         { label: 'Tilt 30° forward', run: () => slide('s_pitch', 30), text: '— the accelerometer reads about −0.50 g on X and 0.87 g on Z.' },
         { label: 'Hot and bright', run: () => { slide('s_temp', 40); slide('s_lux', 5000); }, text: '— 40 °C and 5000 lux.' },
         { label: 'Face east', run: () => slide('s_heading', 90), text: '— the compass field turns 90°.' },
+        { label: 'Fly a rocket', run: () => send('play @launch'), text: '— a 50 s model-rocket flight from the built-in log: 1 g on the pad, the boost clipped at the driver’s ±4 g, drag while coasting, a tumble at apogee, swinging under the parachute, landing on its side.' },
         { text: 'Or move the Sensors sliders; tick Noise for realistic jitter.' },
       ],
       check: 'The log shows the same readings as scaled integers (centi-°C, milli-g, …): WiliBSP’s DIAG has no float printing.',

@@ -106,6 +106,7 @@ add_library(freewili2_bsp STATIC
     emu/src/sdk_periph.c
     emu/src/sdk_sync.c
     emu/src/multicore.c
+    emu/src/sensor_play.c
     emu/src/dev_lcd.c
     emu/src/dev_touch.c
     emu/src/dev_leds.c

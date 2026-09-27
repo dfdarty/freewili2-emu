@@ -43,8 +43,9 @@ The browser page's sliders start at the model's values, including any
 horizontal part of the field (`mag`) to the chosen heading and keeps its
 strength and the downward part.
 
-There is no motion model yet: `accel` and `gyro` hold whatever you set until
-you change them. Scripts can change them over time with `set` and `wait`.
+`accel` and `gyro` hold whatever you set until you change them. To move the
+device over time, [play a sensor log](#playing-a-sensor-log), or change
+values from a script with `set` and `wait`.
 
 Readings saturate at the range the driver configured, as on the chip.
 WiliBSP's BMI323 driver sets ±4 g and ±500 °/s, so `set accel 0 0 6` reads
@@ -116,7 +117,56 @@ build/bin/retrochat --board-id 0000000000000002 --mic-wav hi.wav
 Device 02 shows `01 HI` and logs `rc: rx from 01 len=2`. The WAV loops, so
 it keeps arriving.
 
-## Example: test an app against a flight profile
+## Playing a sensor log
+
+A CSV of time-stamped readings plays into the sensors as the app runs:
+recorded data from a real flight, a drive or a walk, or a profile you
+write by hand.
+
+```sh
+build/bin/my_app --sensor-csv flight.csv          # from the start of the run
+```
+```text
+play flight.csv            # in a script: from this moment
+play flight.csv loop step  # start again at the end; hold each row instead of interpolating
+play stop
+```
+
+In the browser, the Sensors panel has **Play a CSV…** for your own file.
+
+```text
+# comments and blank lines are ignored
+t_ms, ax,   ay,  az,   gx,  gy,  gz, lux
+0,    0,    0,   1,    0,   0,   0,  800
+1500, 0,    0,   5.2,  0,   0,   40, 800
+1600, 0.1,  ,    ,     ,    ,    ,   800   # an empty cell repeats the row above
+```
+
+- **Time**: a `t` column in seconds, or `t_ms` in milliseconds. The first row
+  plays when playback starts; rows must not go back in time.
+- **Values**: `temp` (°C), `rh` (%), `lux`, `ax ay az` (g), `gx gy gz`
+  (°/s), `mx my mz` (µT), or `pitch roll` (°, instead of `ax ay az`).
+  Longer names work too (`accel_x`, `gyro.y`, `mag_z`, `humidity`…). A
+  sensor with no column keeps its current value.
+- **Between rows** values change linearly, and the sensors report them at
+  whatever rate the app reads them. With `step`, each row holds until the
+  next.
+- **At the end** the last row holds and the log says `sensors: playback of
+  FILE finished`, so a script can `expect` it. With `loop`, it starts again.
+- Readings still go through the parts' ranges: WiliBSP's BMI323 driver sets
+  ±4 g, so a 6 g boost reads 4 g, as it would on the board.
+
+### The built-in rocket flight
+
+`@launch` (`--sensor-csv @launch`, `play @launch`, or **Rocket launch** in the
+browser) is a 50-second model-rocket flight with the device's z axis along
+the rocket: 1 g on the pad for 2 s, a 1.4 s boost of up to 7.8 g (clipped at
+4 g), drag deceleration while coasting, an ejection kick and a tumble at
+apogee (12 s, with the light flickering), swinging under the parachute,
+landing at 40 s, then lying on its side (x axis down). Use it to exercise
+launch, apogee and landing detection.
+
+## Example: a flight profile from a script
 
 ```text
 # pad, then boost (6 g, which the ±4 g range clips), coast, and a tumbling descent

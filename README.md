@@ -68,6 +68,8 @@ environment. See [Install and run](https://dfdarty.github.io/freewili2-emu/getti
 - Both RP2350 cores (`pico/multicore.h`, FIFOs, locks, queues), and SPI/I2C
   at their real clock rates with a live bus-load readout, so an app that
   draws faster than the LCD bus allows is slow here too.
+- Sensor-log playback: feed a recorded flight, drive or walk (CSV) into the
+  sensors, or use the built-in model-rocket flight.
 - 13 of WiliBSP's 17 example apps run, including the SD card, header GPIO
   and VIO apps over the MAIN processor link (OneWili), and `retrochat` on
   both cores. The radios are next. [Details](https://dfdarty.github.io/freewili2-emu/compatibility/).

@@ -403,6 +403,7 @@ void emu_poll(void) {
     emu_main_task();
     emu_rtt_task();
     emu_script_task();
+    emu_sensor_play_task();
     perf_task(now);
 
     if (s_run_limit_us && now >= s_run_limit_us) {
@@ -524,6 +525,7 @@ static void usage(void) {
         "  --mic-wav WAV       sound reaching the microphones (looped)\n"
         "  --mute              don't play audio through the PC\n"
         "  --board-id HEX16    the RP2350's 64-bit unique id (default E6616408432A7B15)\n"
+        "  --sensor-csv FILE   play a sensor log (CSV, or @launch for the built-in rocket flight)\n"
         "  --perf              log bus load and LCD throughput once a second\n"
         "  --instant-bus       SPI/I2C transfers take no time (to compare against the old, untimed model)\n"
         "  --sdcard DIR        folder that stands in for the SD card (default ./sdcard; 'none' = no card)\n"
@@ -544,6 +546,7 @@ int main(int argc, char **argv) {
     uint32_t rails = 0x8183u;   /* sensors, display, USB hub, status LED, debug probe */
     const char *script = NULL;
     const char *sdcard = NULL;
+    const char *sensor_csv = NULL;
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
@@ -561,6 +564,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--mic-wav") && i + 1 < argc) emu_audio_set_mic_wav(argv[++i]);
         else if (!strcmp(a, "--mute")) s_mute = true;
         else if (!strcmp(a, "--perf")) s_perf_log = true;
+        else if (!strcmp(a, "--sensor-csv") && i + 1 < argc) sensor_csv = argv[++i];
         else if (!strcmp(a, "--board-id") && i + 1 < argc) {
             if (!emu_set_board_id(argv[++i])) { fprintf(stderr, "bad --board-id %s (16 hex digits)\n", argv[i]); return 2; }
         }
@@ -610,6 +614,10 @@ int main(int argc, char **argv) {
     if (!s_headless) window_open();              /* may fall back to headless */
     emu_audio_enable_host(!s_headless && !s_mute);
     if (script) emu_script_load(script);
+    if (sensor_csv) {
+        const char *err = emu_sensor_play(sensor_csv, false, false);
+        if (err) { fprintf(stderr, "--sensor-csv %s\n", err); return 2; }
+    }
 
     int rc = fw2_emu_app_main();
     char why[48];
