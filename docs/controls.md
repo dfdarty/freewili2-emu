@@ -37,11 +37,23 @@ The browser version adds panels beside the device:
 - **App picker** and **Restart** at the top. `?app=NAME` in the URL picks an
   app; `?args=...` passes [command-line flags](cli.md), for example
   `?app=hello_audio&args=-v`.
+- **About this app:** for each WiliBSP example, what it tests, what you're
+  seeing, and things to try. The ▶ buttons do them for you (tilt the device,
+  play a tone into one microphone, type with the chord keyboard, …) by moving
+  the same sliders and pressing the same keys you would. It also says which
+  log line confirms the result. Panels the app uses are outlined, tagged
+  "used by this app" and moved up next to the guide. Your own apps get a
+  short general guide.
 - **Sensors:** temperature, humidity, light, pitch, roll and compass heading,
   plus sensor noise.
 - **Sound in the room:** a test tone and each microphone's pickup, in their
   physical order (D, B, A, C from left to right).
+- **GPIO header inputs:** drive the MAIN processor's header pins from
+  outside, and choose what is wired to Trig_IN/VREF.
 - **RTT diagnostics:** the app's `DIAG()` output.
+
+Each panel carries a one-line hint about what it's for; **hide hints** in the
+guide turns them off (the page remembers the choice).
 
 Click the device before typing, so it has keyboard focus.
 

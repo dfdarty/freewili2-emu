@@ -57,6 +57,20 @@
   .pins button.hi { border-color: #4a86e8; background: #1d3050; }
   .pins button.lo { border-color: #4a86e8; }
   .note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+  /* app guide + panel hints */
+  #guide h2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  #guide h2 button { font-size: 11px; padding: 2px 8px; text-transform: none; letter-spacing: 0; }
+  #guide .what { margin: 0 0 8px; }
+  #guide h3 { font-size: 11px; margin: 10px 0 4px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  #guide #g-see { margin: 0; font-size: 13px; }
+  #guide ul { margin: 0; padding-left: 18px; font-size: 13px; }
+  #guide li { margin: 3px 0; }
+  #guide li button { font-size: 12px; padding: 1px 8px; margin-right: 6px; border-color: var(--accent); color: var(--accent); }
+  #guide li button:disabled { opacity: .5; }
+  .hint { color: var(--muted); font-size: 12px; margin: -2px 0 8px; }
+  body.nohints .hint { display: none; }
+  .card.focus { border-color: var(--accent); }
+  .card h2 .tag { float: right; color: var(--accent); text-transform: none; letter-spacing: 0; font-weight: normal; }
   header a.docs { text-decoration: none; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
 </style>
 </head>
@@ -80,8 +94,18 @@
     <div id="status">loading…</div>
   </div>
   <aside>
-    <div class="card">
+    <div class="card" id="guide">
+      <h2><span>About this app</span><button type="button" id="hints-toggle">hide hints</button></h2>
+      <p class="what" id="g-what"></p>
+      <h3>What you're seeing</h3>
+      <p id="g-see"></p>
+      <h3>Try this</h3>
+      <ul id="g-try"></ul>
+      <p class="note" id="g-check"></p>
+    </div>
+    <div class="card" id="card-controls">
       <h2>Controls</h2>
+      <p class="hint">Keys and mouse act like the device's buttons and touch screen. Click the device first so it has keyboard focus.</p>
       <dl>
         <dt><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> <kbd>Enter</kbd></dt><dd>D-pad</dd>
         <dt><kbd>H</kbd> <kbd>O</kbd> <kbd>C</kbd> <kbd>P</kbd></dt><dd>HOME · OK · CANCEL · PAGE</dd>
@@ -91,16 +115,19 @@
         <dt><kbd>F2</kbd></dt><dd>download a PNG of the whole panel</dd>
       </dl>
     </div>
-    <div class="card">
+    <div class="card" id="card-sensors">
       <h2>Sensors</h2>
+      <p class="hint">What the on-board sensors measure. Move a slider and the app reads the new value over I2C, exactly as its driver would on the board.</p>
       <div class="sl" id="sensors"></div>
     </div>
-    <div class="card">
+    <div class="card" id="card-sound">
       <h2>Sound in the room</h2>
+      <p class="hint">Sound reaching the microphones: a test tone, plus how much of it each mic picks up. Mics are listed left to right as on the device.</p>
       <div class="sl" id="sound"></div>
     </div>
-    <div class="card">
+    <div class="card" id="card-header">
       <h2>GPIO header inputs</h2>
+      <p class="hint">The expansion header, reached through the MAIN processor. The strip under the device shows what apps drive; here you drive pins from outside.</p>
       <div class="pins" id="pins"></div>
       <div class="sl"><label for="vrefext">Trig_IN/VREF</label><select id="vrefext">
         <option value="-1">nothing</option><option>1.8</option><option>3.3</option><option>5.0</option>
@@ -108,8 +135,9 @@
       <p class="note">Click a pin to drive it from outside: open → high → low. The SD card is
         held in memory and starts fresh on every load.</p>
     </div>
-    <div class="card">
+    <div class="card" id="card-log">
       <h2>RTT diagnostics</h2>
+      <p class="hint">The app's own log (<code>DIAG()</code> lines), as WiliBSP's <code>fw rtt</code> shows it on hardware. Grey lines are the emulator's notes.</p>
       <pre id="log"></pre>
     </div>
   </aside>
@@ -242,6 +270,7 @@
     ['roll', 'Roll °', -180, 180, 1, v => v.toFixed(0)],
     ['heading', 'Heading °', 0, 359, 1, v => v.toFixed(0)],
   ];
+  const controls = {};                         // slider id -> { inp, toSlider }, for the guide's actions
   const box = document.getElementById('sensors');
   for (const [key, name, min, max, step, fmt, toSlider, fromSlider] of defs) {
     const id = `s_${key}`;
@@ -255,6 +284,7 @@
       V[key].set(v);
       out.textContent = fmt(V[key].get());
     });
+    controls[id] = { inp, toSlider };
     box.append(lab, inp, out);
   }
   const nl = document.createElement('label'); nl.textContent = 'Noise';
@@ -284,6 +314,7 @@
       if (key === 'hz' || key === 'amp') send(`set tone ${R.hz} ${R.amp}`);
       else send(`set mic.${key} ${R[key]}`);
     });
+    controls[id] = { inp, toSlider };
     sbox.append(lab, inp, out);
   }
 
@@ -305,6 +336,190 @@
   const vsel = document.getElementById('vrefext');
   if ([...vsel.options].some(o => Number(o.value) === P.vrefext)) vsel.value = [...vsel.options].find(o => Number(o.value) === P.vrefext).value;
   vsel.addEventListener('change', e => send(`set vrefext ${e.target.value}`));
+
+  // ---- "About this app": what each example tests, what you see, what to try.
+  // Actions drive the same controls a person would (sliders, keys), so the
+  // panels always show what the model holds.
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const slide = (id, v) => {                   // move a slider as if dragged (value in the model's units)
+    const c = controls[id]; if (!c) return;
+    c.inp.value = c.toSlider ? c.toSlider(v) : v;
+    c.inp.dispatchEvent(new Event('input'));
+  };
+  const press = async (...btns) => { for (const b of btns) { send(`press ${b}`); await sleep(350); } };
+  const hold = async (btn, ms) => { send(`hold ${btn}`); await sleep(ms); send(`release ${btn}`); };
+  const withArgs = a => { params.set('args', a); location.search = params.toString(); };
+  const K = s => `<kbd>${s}</kbd>`;
+  const EXIT = { label: 'Hold HOME 5 s', run: () => hold('HOME', 5600),
+                 text: `— WiliBSP's rule for leaving any app (or hold ${K('H')}). The app exits and the log says so.` };
+  const ABOUT = { label: 'Hold PAGE 5 s', run: () => hold('PAGE', 5600),
+                  text: `— the app's About screen (version and source link), a WiliBSP convention.` };
+
+  const GUIDES = {
+    template: {
+      what: 'The smallest WiliBSP app: start-up, the power-zone handshake with the board-manager chip, the LCD, and the HOME-to-exit rule.',
+      see: '“HELLO FREEWILI2” on a black screen. Nothing else happens — that is the point; every other app builds on this.',
+      tryit: [ABOUT, EXIT],
+      check: 'In the log, “app: power zones ready” means the power handshake with the board-manager chip succeeded.',
+      panels: ['log'],
+    },
+    hello_display: {
+      what: 'Tests the display, the touch controller and the 16 RGB LEDs.',
+      see: '“TOUCH THE SCREEN”, and the LEDs along the top of the device lit green.',
+      tryit: [
+        { label: 'Draw a line', run: () => send('drag 60 260 420 60 600'), text: '— a swipe across the screen leaves a red trail.' },
+        { text: 'Or click and drag on the screen yourself.' },
+        EXIT,
+      ],
+      check: 'The log shows a “touch x,y” line for each touch point the app read.',
+      panels: ['log'],
+    },
+    hello_agentio: {
+      what: 'The pattern app WiliBSP uses to check its agent tools (agentio): labelled colour bars an agent can verify in a screenshot.',
+      see: 'Colour bars with text labels. Touches paint a marker so they show up in captures.',
+      tryit: [
+        { label: 'Touch the centre', run: () => send('touch 240 160'), text: '— a marker appears where the touch landed.' },
+        { text: 'Driving it with WiliBSP’s <code>fw.py</code> (press, touch, screenshot) needs the native build with <code>--rtt</code>; the browser build has no RTT sockets.' },
+      ],
+      check: 'The log confirms “pattern drawn, agentio up”.',
+      panels: ['log'],
+    },
+    hello_keyboard: {
+      what: 'Tests all 14 buttons over the board-manager link, and WiliBSP’s two-press chord keyboard.',
+      see: 'Five letter groups on the coloured keys along the bottom, and the text you type at the top.',
+      tryit: [
+        { label: 'Type “hi”', run: () => press('YELLOW', 'GREEN', 'YELLOW', 'BLUE'), text: '— the first press picks a group (yellow = f–j), the second picks the letter in it (green = 3rd → h).' },
+        { text: `Type yourself with ${K('1')}–${K('5')}: two presses per letter. Tap above the line for backspace, below it for space.` },
+      ],
+      check: 'The log shows “uartkbd btn N down/up” for every key edge and “fw2kb char …” for each letter.',
+      panels: ['log'],
+    },
+    hello_charger: {
+      what: 'Reads charger and USB-C status from the board-manager chip’s status frames.',
+      see: 'VBUS, battery voltage and current, charge state and USB-C detection. These are the emulator’s fixed values (on USB power, battery charging); they can’t be changed from this page yet.',
+      tryit: [
+        { label: 'Hold GREEN 1 s', run: () => hold('GREEN', 1000), text: '— the BTNS bitmap changes while the key is down: buttons travel in the same frames.' },
+      ],
+      check: 'FRAMES counts status frames received; ERRORS should stay 0.',
+      panels: [],
+    },
+    hello_sensors: {
+      what: 'Tests WiliBSP’s drivers for the four on-board sensors: temperature/humidity (SHT40), light (OPT4001), motion (BMI323) and compass (BMM350).',
+      see: 'One line per sensor, updated about twice a second.',
+      tryit: [
+        { label: 'Tilt 30° forward', run: () => slide('s_pitch', 30), text: '— the accelerometer reads about −0.50 g on X and 0.87 g on Z.' },
+        { label: 'Hot and bright', run: () => { slide('s_temp', 40); slide('s_lux', 5000); }, text: '— 40 °C and 5000 lux.' },
+        { label: 'Face east', run: () => slide('s_heading', 90), text: '— the compass field turns 90°.' },
+        { text: 'Or move the Sensors sliders; tick Noise for realistic jitter.' },
+      ],
+      check: 'The log shows the same readings as scaled integers (centi-°C, milli-g, …): WiliBSP’s DIAG has no float printing.',
+      panels: ['sensors', 'log'],
+    },
+    hello_audio: {
+      what: 'Tests the audio codec and I2S: a 1 kHz tone on the speaker, then the headphone jack, while the mic input runs.',
+      see: 'A loop: 3 s silence → tone on the speaker (4 s) → tone on the jack (4 s). The bar is the codec’s mic level. Click the page once so the browser allows sound.',
+      tryit: [
+        { label: 'Sing into the mic', run: () => { slide('r_hz', 440); slide('r_amp', 12000); }, text: '— a 440 Hz tone in the room; the mic bar rises.' },
+        { label: 'Quiet room', run: () => slide('r_amp', 0), text: '— back to silence. During the speaker phase the bar still moves: the mic hears the speaker, as it would on the board.' },
+      ],
+      check: 'The log shows “state=SPEAKER / JACK / SILENCE” and “vu: … peak=” mic levels.',
+      panels: ['sound', 'log'],
+    },
+    hello_mics: {
+      what: 'Tests the four PDM microphones and WiliBSP’s decimation filter (1-bit PDM → 16 kHz audio).',
+      see: 'Four level meters in the order the mics sit on the device: D, B, A, C.',
+      tryit: [
+        { label: 'Tone into all mics', run: () => { for (const m of ['D', 'B', 'A', 'C']) slide(`r_${m}`, 1); slide('r_hz', 1000); slide('r_amp', 8000); }, text: '— all four meters rise together.' },
+        { label: 'Only mic C', run: () => { for (const m of ['D', 'B', 'A']) slide(`r_${m}`, 0); slide('r_C', 1); if (!R.amp) slide('r_amp', 8000); }, text: '— only the rightmost meter moves: each channel is wired to the right mic.' },
+        { text: 'Or use the Sound in the room sliders.' },
+      ],
+      check: 'The log shows “mic A: rms=… peak=…” for each channel about three times a second.',
+      panels: ['sound', 'log'],
+    },
+    hello_psram_exec: {
+      what: 'An app whose code runs from the 8 MB PSRAM instead of SRAM (WiliBSP’s fw2_psram_app()), plus a power-cycle of the RGB LED rail.',
+      see: 'About 3 s of start-up, the LED rail switching off and on, then “EXECUTING FROM PSRAM”.',
+      tryit: [EXIT],
+      check: 'The log shows “psram: RGB LED rail cycled” and “psram: ui ready”.',
+      panels: ['log'],
+    },
+    hello_sdcard: {
+      what: 'Reads and writes the SD card, which belongs to the MAIN processor, over the OneWili link.',
+      see: 'The app creates /owlog, appends lines to run.txt, reads the file back and lists the folder. The SD light on the header strip under the device flickers while it works.',
+      tryit: [
+        { label: 'Run it again', run: () => location.reload(), text: '— in the browser the card lives in memory and starts empty on every load; in a native build it is a real folder (./sdcard) that keeps its files.' },
+      ],
+      check: 'The log shows the file size, the text read back, the folder listing, then “done”.',
+      panels: ['log'],
+    },
+    toggleled: {
+      what: 'Drives a header pin on the MAIN processor over the OneWili link: sets the header voltage to 3.3 V, then toggles GPIO 25.',
+      see: '“TOGGLING GPIO 25”, and pin 25 on the header strip under the device switching high and low.',
+      tryit: [
+        { text: 'Watch pin 25 on the strip under the device.' },
+        EXIT,
+      ],
+      check: 'The log says “link up, toggling main-CPU GPIO 25”; a toggle the MAIN processor refused would log a failure.',
+      panels: ['header', 'log'],
+    },
+    hello_vref: {
+      what: 'Tests the header’s voltage reference (VIO): sweeps the VREF options and measures VIO and Vout with the display CPU’s ADC, then toggles GPIO 25.',
+      see: '“SWEEPING VREF OPTIONS…”, then “VIO = 3.3V” and pin 25 toggling on the strip under the device.',
+      tryit: [
+        { label: 'Restart with 3.3 V on Trig_IN/VREF', run: () => withArgs('--sensor vrefext=3.3'), text: '— the sweep’s external-reference step now reads 3.3 V. With nothing wired it reads about 4.8 V, the level an unconnected pin floats to on the bench board.' },
+        { text: 'The Trig_IN/VREF selector sets what is wired to that pin. The sweep runs once at start-up, so restart after changing it.' },
+      ],
+      check: 'The log shows VIO and Vout in millivolts for every VREF option.',
+      panels: ['header', 'log'],
+    },
+  };
+  const GENERIC = {
+    what: 'Your app, built for the emulator.',
+    see: 'Whatever your code draws. Its DIAG() output appears in the RTT diagnostics log.',
+    tryit: [
+      { text: `Use the keys (${K('1')}–${K('5')}, ${K('H')} ${K('O')} ${K('C')} ${K('P')}, arrows) and click the screen to touch it.` },
+      { text: 'Sensors, Sound in the room and GPIO header inputs feed the parts your app reads.' },
+      EXIT,
+    ],
+    check: 'Automate these checks with an input script and <code>expect</code> (docs: “Input scripts”).',
+    panels: ['log'],
+  };
+  const g = GUIDES[current.name] || GENERIC;
+  document.getElementById('g-what').innerHTML = g.what;
+  document.getElementById('g-see').innerHTML = g.see;
+  document.getElementById('g-check').innerHTML = g.check || '';
+  const ul = document.getElementById('g-try');
+  for (const t of g.tryit) {
+    const li = document.createElement('li');
+    if (t.label) {
+      const b = Object.assign(document.createElement('button'), { type: 'button', textContent: `▶ ${t.label}` });
+      b.addEventListener('click', async () => { b.disabled = true; try { await t.run(); } finally { b.disabled = false; } canvas.focus(); });
+      li.append(b);
+    }
+    li.insertAdjacentHTML('beforeend', t.text || '');
+    ul.append(li);
+  }
+  // Panels this app uses: highlight them and move them up under the guide
+  // (inputs first, then the log), so the thing to watch is on screen.
+  let after = document.getElementById('guide');
+  const focus = (g.panels || []).slice().sort((a, b) => (a === 'log') - (b === 'log'));
+  for (const id of focus) {
+    const card = document.getElementById(`card-${id}`);
+    if (!card) continue;
+    card.classList.add('focus');
+    card.querySelector('h2').insertAdjacentHTML('beforeend', '<span class="tag">used by this app</span>');
+    after.after(card);
+    after = card;
+  }
+  const ht = document.getElementById('hints-toggle');
+  const setHints = on => { document.body.classList.toggle('nohints', !on); ht.textContent = on ? 'hide hints' : 'show hints'; };
+  let hintsOn = true;
+  try { hintsOn = localStorage.getItem('fw2emu.hints') !== 'off'; } catch (e) { /* storage blocked */ }
+  setHints(hintsOn);
+  ht.addEventListener('click', () => {
+    hintsOn = !hintsOn; setHints(hintsOn);
+    try { localStorage.setItem('fw2emu.hints', hintsOn ? 'on' : 'off'); } catch (e) { /* storage blocked */ }
+  });
 
   const s = document.createElement('script');
   s.src = `${current.name}.js`;
