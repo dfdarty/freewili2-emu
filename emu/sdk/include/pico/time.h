@@ -58,6 +58,48 @@ static inline bool best_effort_wfe_or_timeout(absolute_time_t t) {
     return time_reached(t);
 }
 
+/* Alarms and repeating timers. Callbacks run from the emulator's service
+ * loop (emu_poll, up to 1 kHz), the host's stand-in for the timer IRQ. */
+typedef int32_t alarm_id_t;
+typedef struct alarm_pool alarm_pool_t;
+typedef int64_t (*alarm_callback_t)(alarm_id_t id, void *user_data);
+typedef struct repeating_timer repeating_timer_t;
+typedef bool (*repeating_timer_callback_t)(repeating_timer_t *rt);
+struct repeating_timer {
+    int64_t delay_us;
+    alarm_pool_t *pool;
+    alarm_id_t alarm_id;
+    repeating_timer_callback_t callback;
+    void *user_data;
+};
+
+alarm_pool_t *alarm_pool_get_default(void);
+alarm_id_t alarm_pool_add_alarm_in_us(alarm_pool_t *pool, uint64_t us, alarm_callback_t cb, void *user_data, bool fire_if_past);
+bool alarm_pool_cancel_alarm(alarm_pool_t *pool, alarm_id_t id);
+bool alarm_pool_add_repeating_timer_us(alarm_pool_t *pool, int64_t delay_us, repeating_timer_callback_t cb, void *user_data, repeating_timer_t *out);
+static inline alarm_id_t add_alarm_in_us(uint64_t us, alarm_callback_t cb, void *user_data, bool fire_if_past) {
+    return alarm_pool_add_alarm_in_us(alarm_pool_get_default(), us, cb, user_data, fire_if_past);
+}
+static inline alarm_id_t add_alarm_in_ms(uint32_t ms, alarm_callback_t cb, void *user_data, bool fire_if_past) {
+    return add_alarm_in_us((uint64_t)ms * 1000u, cb, user_data, fire_if_past);
+}
+static inline alarm_id_t add_alarm_at(absolute_time_t t, alarm_callback_t cb, void *user_data, bool fire_if_past) {
+    uint64_t now = get_absolute_time();
+    return add_alarm_in_us(t > now ? t - now : 0, cb, user_data, fire_if_past);
+}
+static inline bool cancel_alarm(alarm_id_t id) { return alarm_pool_cancel_alarm(alarm_pool_get_default(), id); }
+static inline bool add_repeating_timer_us(int64_t delay_us, repeating_timer_callback_t cb, void *user_data, repeating_timer_t *out) {
+    return alarm_pool_add_repeating_timer_us(alarm_pool_get_default(), delay_us, cb, user_data, out);
+}
+static inline bool add_repeating_timer_ms(int32_t delay_ms, repeating_timer_callback_t cb, void *user_data, repeating_timer_t *out) {
+    return add_repeating_timer_us((int64_t)delay_ms * 1000, cb, user_data, out);
+}
+static inline bool cancel_repeating_timer(repeating_timer_t *timer) {
+    bool r = timer->alarm_id ? alarm_pool_cancel_alarm(timer->pool, timer->alarm_id) : false;
+    timer->alarm_id = 0;
+    return r;
+}
+
 #ifdef __cplusplus
 }
 #endif

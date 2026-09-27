@@ -1,8 +1,10 @@
 /* sdk_periph.c — host implementations of the Pico SDK peripheral APIs:
- * GPIO, SPI, I2C, UART, DMA, IRQ, PIO, clocks, PSRAM, watchdog.
+ * GPIO, SPI, I2C, UART, DMA, IRQ, PIO, clocks, PSRAM, watchdog, ADC and
+ * timer alarms.
  * Each one forwards to the attached device models. */
 #include "emu/emu.h"
 
+#include "hardware/adc.h"
 #include "hardware/clocks.h"
 #include "hardware/dma.h"
 #include "hardware/gpio.h"
@@ -14,6 +16,7 @@
 #include "hardware/spi.h"
 #include "hardware/uart.h"
 #include "hardware/watchdog.h"
+#include "pico/time.h"
 
 #include <string.h>
 
@@ -217,7 +220,17 @@ void emu_uart_to_mcu(unsigned u, const uint8_t *b, size_t n) {
 uint uart_init(uart_inst_t *u, uint baud) { u->baud = baud; u->enabled = true; return baud; }
 void uart_deinit(uart_inst_t *u) { u->enabled = false; }
 uint uart_set_baudrate(uart_inst_t *u, uint baud) { u->baud = baud; return baud; }
-bool uart_is_readable(uart_inst_t *u) { emu_poll(); return u->head != u->tail; }
+size_t emu_uart_rx_level(unsigned u) {
+    const uart_inst_t *ui = &emu_uart_inst[u];
+    return (ui->head + EMU_UART_FIFO - ui->tail) % EMU_UART_FIFO;
+}
+
+bool uart_is_readable(uart_inst_t *u) {
+    emu_poll();
+    emu_uart_device_t *d = s_uart_dev[u->index];
+    if (d && d->poll) d->poll(d);          /* let a paced model put due bytes on the wire */
+    return u->head != u->tail;
+}
 bool uart_is_readable_within_us(uart_inst_t *u, uint32_t us) {
     uint64_t end = emu_time_us() + us;
     while (!uart_is_readable(u)) { if (emu_time_us() >= end) return false; emu_sleep_us(10); }
@@ -666,4 +679,107 @@ size_t psram_get_size(void) { return s_psram_ok ? (size_t)PICO_PSRAM_SIZE_BYTES 
 void watchdog_reboot(uint32_t pc, uint32_t sp, uint32_t delay_ms) {
     (void)pc; (void)sp; (void)delay_ms;
     emu_app_exit("watchdog reboot (on hardware: back to the FREE-WILi 2 loader)");
+}
+
+/* ================================================================= ADC */
+static struct { uint input; bool temp_en; } s_adc;
+
+void adc_init(void) { s_adc.input = 0; }
+void adc_gpio_init(uint g) {
+    if (g < ADC_BASE_PIN || g >= ADC_BASE_PIN + 8u) return;
+    gpio_set_function(g, GPIO_FUNC_NULL);
+    gpio_set_pulls(g, false, false);
+}
+void adc_select_input(uint input) { if (input < NUM_ADC_CHANNELS) s_adc.input = input; }
+uint adc_get_selected_input(void) { return s_adc.input; }
+uint16_t adc_read(void) {
+    emu_poll();
+    float v = emu_adc_input_volts(s_adc.input);
+    if (s_adc.input == ADC_TEMPERATURE_CHANNEL_NUM && !s_adc.temp_en) v = 0.0f;
+    long code = (long)(v / 3.3f * 4095.0f + 0.5f);
+    return (uint16_t)(code < 0 ? 0 : code > 4095 ? 4095 : code);
+}
+void adc_set_round_robin(uint mask) { (void)mask; }
+void adc_set_temp_sensor_enabled(bool en) { s_adc.temp_en = en; }
+void adc_run(bool run) { (void)run; }
+void adc_set_clkdiv(float d) { (void)d; }
+void adc_fifo_setup(bool en, bool dreq, uint16_t th, bool err, bool shift) { (void)en; (void)dreq; (void)th; (void)err; (void)shift; }
+bool adc_fifo_is_empty(void) { return false; }
+uint8_t adc_fifo_get_level(void) { return 1; }
+uint16_t adc_fifo_get(void) { return adc_read(); }
+uint16_t adc_fifo_get_blocking(void) { return adc_read(); }
+void adc_fifo_drain(void) {}
+void adc_irq_set_enabled(bool en) { (void)en; }
+
+/* ======================================================= alarms / timers */
+#define MAX_ALARMS 16
+static struct {
+    alarm_id_t id;                 /* 0 = free slot */
+    uint64_t   at;
+    alarm_callback_t cb;           /* one-shot alarm, or */
+    repeating_timer_t *rt;         /* a repeating timer   */
+    void      *user;
+} s_alarm[MAX_ALARMS];
+static alarm_id_t s_next_alarm = 1;
+static struct alarm_pool { int dummy; } s_default_pool;
+
+alarm_pool_t *alarm_pool_get_default(void) { return &s_default_pool; }
+
+static alarm_id_t alarm_add(uint64_t at, alarm_callback_t cb, repeating_timer_t *rt, void *user) {
+    for (int i = 0; i < MAX_ALARMS; i++)
+        if (!s_alarm[i].id) {
+            alarm_id_t id = s_next_alarm++;
+            if (s_next_alarm <= 0) s_next_alarm = 1;
+            s_alarm[i].id = id; s_alarm[i].at = at; s_alarm[i].cb = cb; s_alarm[i].rt = rt; s_alarm[i].user = user;
+            return id;
+        }
+    return -1;
+}
+
+alarm_id_t alarm_pool_add_alarm_in_us(alarm_pool_t *pool, uint64_t us, alarm_callback_t cb, void *user, bool fire_if_past) {
+    (void)pool; (void)fire_if_past;
+    return alarm_add(emu_time_us() + us, cb, NULL, user);
+}
+
+bool alarm_pool_cancel_alarm(alarm_pool_t *pool, alarm_id_t id) {
+    (void)pool;
+    for (int i = 0; i < MAX_ALARMS; i++)
+        if (id > 0 && s_alarm[i].id == id) { s_alarm[i].id = 0; return true; }
+    return false;
+}
+
+bool alarm_pool_add_repeating_timer_us(alarm_pool_t *pool, int64_t delay_us, repeating_timer_callback_t cb,
+                                       void *user, repeating_timer_t *out) {
+    if (!delay_us) delay_us = 1;
+    out->delay_us = delay_us;
+    out->pool = pool;
+    out->callback = cb;
+    out->user_data = user;
+    uint64_t d = (uint64_t)(delay_us < 0 ? -delay_us : delay_us);
+    out->alarm_id = alarm_add(emu_time_us() + d, NULL, out, user);
+    return out->alarm_id > 0;
+}
+
+/* Called from emu_poll(): run every alarm that is due. */
+void emu_timers_task(void) {
+    uint64_t now = emu_time_us();
+    for (int i = 0; i < MAX_ALARMS; i++) {
+        if (!s_alarm[i].id || s_alarm[i].at > now) continue;
+        alarm_id_t id = s_alarm[i].id;
+        uint64_t due = s_alarm[i].at;
+        if (s_alarm[i].rt) {
+            repeating_timer_t *rt = s_alarm[i].rt;
+            bool keep = rt->callback(rt);
+            if (s_alarm[i].id != id) continue;              /* cancelled from the callback */
+            if (!keep) { s_alarm[i].id = 0; rt->alarm_id = 0; continue; }
+            uint64_t d = (uint64_t)(rt->delay_us < 0 ? -rt->delay_us : rt->delay_us);
+            s_alarm[i].at = rt->delay_us < 0 ? due + d : emu_time_us() + d;
+            if (s_alarm[i].at < now) s_alarm[i].at = now + d;  /* don't replay a backlog */
+        } else {
+            int64_t r = s_alarm[i].cb(id, s_alarm[i].user);
+            if (s_alarm[i].id != id) continue;
+            if (r == 0) s_alarm[i].id = 0;
+            else s_alarm[i].at = r > 0 ? due + (uint64_t)r : emu_time_us() + (uint64_t)(-r);
+        }
+    }
 }
