@@ -1,0 +1,42 @@
+name: Docker image
+
+# Builds the Dockerfile and checks what the image serves. Runs only when
+# something that goes into the image changes (and on demand), to save CI
+# minutes.
+on:
+  push:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - 'docker/**'
+      - 'web/**'
+      - CMakeLists.txt
+      - 'cmake/**'
+      - .github/workflows/docker.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    name: build and smoke-check the image
+    runs-on: ubuntu-24.04
+    steps:
+      # No submodules on purpose: this is the `docker build` from a bare
+      # checkout (or the Git URL) case, where the Dockerfile fetches WiliBSP
+      # and its nested libs/onewili itself.
+      - uses: actions/checkout@v7
+      - name: The Dockerfile pins the WiliBSP commit this repository records
+        run: |
+          want=$(git ls-tree HEAD third_party/wilibsp | awk '{print $3}')
+          have=$(sed -n 's/^ARG WILIBSP_REF=//p' Dockerfile)
+          if [ "$want" != "$have" ]; then
+            echo "::error file=Dockerfile::WILIBSP_REF is $have but the submodule is at $want"
+            exit 1
+          fi
+          echo "WILIBSP_REF $have matches the submodule"
+      - name: Build
+        run: docker build -t freewili2-emu .
+      - name: Smoke-check the image
+        run: docker/smoke-image.sh freewili2-emu

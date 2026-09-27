@@ -147,7 +147,12 @@
   desc.textContent = `v${current.version} — ${current.description}`;
   document.title = `${current.name} — FREE-WILi 2 Emulator`;
 
-  sel.addEventListener('change', () => { params.set('app', sel.value); location.search = params.toString(); });
+  // Switching apps starts the new one with default options: ?args= belongs to the app it was given for.
+  sel.addEventListener('change', () => {
+    params.set('app', sel.value);
+    params.delete('args');
+    location.search = params.toString();
+  });
   document.getElementById('restart').addEventListener('click', () => location.reload());
 
   const MAX_LINES = 2000;
@@ -164,6 +169,7 @@
 
   window.Module = {
     canvas,
+    pageTitle: document.title,
     arguments: (params.get('args') || '').split(' ').filter(Boolean),
     print: t => log(t),
     printErr: t => log(t, t.startsWith('[emu]') ? 'emu' : 'err'),
