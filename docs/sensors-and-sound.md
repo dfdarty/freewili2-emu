@@ -60,7 +60,8 @@ room, which is the sum of:
   sample rate, mono or stereo mixed down; it loops),
 - a **test tone**: `set tone 1000 8000` (frequency in Hz, level in 16-bit
   units; `set tone 0` stops it),
-- some of **whatever the speaker is playing** (acoustic feedback),
+- some of **whatever the speaker is playing** (acoustic feedback), heard
+  at the moment it plays, so a device can decode its own transmission,
 - a quiet **noise floor**.
 
 | Name | Values | Meaning |
@@ -90,6 +91,30 @@ The model follows the codec's registers: DAC mute and volume, and routing to
 the speaker or the headphone jack, each with its own gain. The sample rate is
 derived from the app's clock settings as on hardware (16 009 Hz with
 WiliBSP's defaults). The browser plays sound once you click the page.
+
+## Two emulators talking
+
+Apps that talk through sound, like WiliBSP's `retrochat` (text as modem
+tones), can be tested between two emulated devices: record what one plays
+and feed it to the other's microphones. Give them different
+[`--board-id`](cli.md)s so they don't take each other for themselves.
+
+```sh
+# device 01 sends "HI" (the button at 80,228) and records its speaker
+cat > send.txt <<'EOF'
+wait 2500
+touch 80 228 150
+expect "rc: tx done" 5000
+quit
+EOF
+build/bin/retrochat --headless --board-id 0000000000000001 --script send.txt --audio-out hi.wav
+
+# device 02 hears it
+build/bin/retrochat --board-id 0000000000000002 --mic-wav hi.wav
+```
+
+Device 02 shows `01 HI` and logs `rc: rx from 01 len=2`. The WAV loops, so
+it keeps arriving.
 
 ## Example: test an app against a flight profile
 

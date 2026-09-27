@@ -369,8 +369,14 @@ uint uart_get_dreq(uart_inst_t *u, bool tx) { return u->index ? (tx ? DREQ_UART1
 
 /* ================================================================= IRQ */
 #define MAX_HANDLERS 8
+/* One vector table shared by both cores (the SDK's default), and an enable
+ * per core (each core has its own NVIC). A line raised while its core is
+ * the other one, or has interrupts masked, is held pending until that core
+ * runs with them unmasked. */
 static irq_handler_t s_irq[NUM_IRQS][MAX_HANDLERS];
-static bool s_irq_en[NUM_IRQS];
+static bool s_irq_en[2][NUM_IRQS];
+static bool s_irq_pend[2][NUM_IRQS];
+static bool s_any_pend[2];
 
 void irq_set_exclusive_handler(uint n, irq_handler_t h) { memset(s_irq[n], 0, sizeof s_irq[n]); s_irq[n][0] = h; }
 void irq_add_shared_handler(uint n, irq_handler_t h, uint8_t order) {
@@ -382,18 +388,41 @@ void irq_add_shared_handler(uint n, irq_handler_t h, uint8_t order) {
 void irq_remove_handler(uint n, irq_handler_t h) {
     for (int i = 0; i < MAX_HANDLERS; i++) if (s_irq[n][i] == h) s_irq[n][i] = NULL;
 }
-void irq_set_enabled(uint n, bool en) { s_irq_en[n] = en; }
-bool irq_is_enabled(uint n) { return s_irq_en[n]; }
+void irq_set_enabled(uint n, bool en) {
+    unsigned c = get_core_num();
+    s_irq_en[c][n] = en;
+    if (!en) s_irq_pend[c][n] = false;
+}
+bool irq_is_enabled(uint n) { return s_irq_en[get_core_num()][n]; }
 
 static void dma_irq_dispatch(unsigned n);
 
-void emu_irq_raise(unsigned n) {
+static void irq_dispatch(unsigned n) {
     static int depth;
-    if (n >= NUM_IRQS || !s_irq_en[n] || depth > 4) return;
+    if (depth > 4) return;
     depth++;
     if (n == DMA_IRQ_0 || n == DMA_IRQ_1) dma_irq_dispatch(n);
     else for (int i = 0; i < MAX_HANDLERS; i++) if (s_irq[n][i]) s_irq[n][i]();
     depth--;
+}
+
+void emu_irq_raise_core(unsigned c, unsigned n) {
+    if (n >= NUM_IRQS || c > 1 || !s_irq_en[c][n]) return;
+    if (c == get_core_num() && !emu_core_irqs_off(c)) irq_dispatch(n);
+    else { s_irq_pend[c][n] = true; s_any_pend[c] = true; }
+}
+
+void emu_irq_raise(unsigned n) {
+    emu_irq_raise_core(0, n);
+    emu_irq_raise_core(1, n);
+}
+
+void emu_irq_deliver_pending(void) {
+    unsigned c = get_core_num();
+    if (!s_any_pend[c] || emu_core_irqs_off(c)) return;
+    s_any_pend[c] = false;
+    for (unsigned n = 0; n < NUM_IRQS; n++)
+        if (s_irq_pend[c][n]) { s_irq_pend[c][n] = false; if (s_irq_en[c][n]) irq_dispatch(n); }
 }
 
 /* ================================================================= DMA */

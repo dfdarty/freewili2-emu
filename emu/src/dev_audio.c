@@ -161,7 +161,6 @@ float emu_audio_scene_at(double t, float speaker_bleed, uint32_t *rng) {
     return v + speaker_bleed + noise;
 }
 
-float emu_audio_speaker_now(void);
 
 /* ------------------------------------------------------------ host output */
 static struct {
@@ -252,10 +251,40 @@ static struct {
     uint64_t anchor_us, done;
     double   fs;
     bool     stalled, warned_stall;
-    float    last_spk;            /* last speaker-routed sample, for mic bleed */
     float    peak_out;
     uint64_t loud_us;             /* last time something audible played */
 } I;
+
+/* What the speaker played, with the time of each frame, so the PDM mics can
+ * hear it at the moment they sample. Both models run in ~1 ms batches; a mic
+ * that took "the latest speaker sample" would hear it held for a whole batch
+ * (a 1 kHz staircase instead of a tone). */
+#define SPK_HIST 8192u
+static struct { float v[SPK_HIST]; double t[SPK_HIST]; unsigned head, n; } H;
+
+static void spk_record(double t, float v) {
+    H.v[H.head] = v;
+    H.t[H.head] = t;
+    H.head = (H.head + 1u) % SPK_HIST;
+    if (H.n < SPK_HIST) H.n++;
+}
+
+float emu_audio_speaker_at(double t) {
+    if (!H.n) return 0.0f;
+    unsigned last = (H.head + SPK_HIST - 1u) % SPK_HIST;
+    if (t >= H.t[last]) return t - H.t[last] < 0.005 ? H.v[last] : 0.0f;   /* not played (yet) */
+    double fs = I.fs > 0.0 ? I.fs : 16000.0;
+    /* frames are 1/fs apart: jump close, then walk to the pair around t */
+    unsigned back = (unsigned)((H.t[last] - t) * fs);
+    if (back >= H.n) return 0.0f;                                        /* older than the history */
+    unsigned i = (last + SPK_HIST - back) % SPK_HIST;
+    for (unsigned k = 0; k < 4 && H.t[i] > t && back + 1u < H.n; k++, back++) i = (i + SPK_HIST - 1u) % SPK_HIST;
+    unsigned j = (i + 1u) % SPK_HIST;
+    if (H.t[i] > t || j == H.head || H.t[j] <= H.t[i]) return H.v[i];
+    double f = (t - H.t[i]) / (H.t[j] - H.t[i]);
+    if (f > 1.0) f = 1.0;
+    return (float)(H.v[i] + (H.v[j] - H.v[i]) * f);
+}
 
 static unsigned i2s_tx_level(emu_pio_sm_device_t *d) { (void)d; return I.tx_n; }
 static void i2s_put(emu_pio_sm_device_t *d, uint32_t w) {
@@ -321,7 +350,7 @@ static void i2s_frame(double t, float spk, float hp, int rate) {
     float left = have ? (float)(int16_t)(w >> 16) : 0.0f;
 
     float s_spk = left * spk, s_hp = left * hp;
-    I.last_spk = s_spk;
+    spk_record(t, s_spk);
     float out = s_spk + s_hp;
     if (fabsf(out) > I.peak_out) I.peak_out = fabsf(out);
     if (fabsf(out) > 64.0f) I.loud_us = emu_time_us();
@@ -361,8 +390,7 @@ void emu_audio_task(void) {
     host_flush(rate);
 }
 
-/* Speaker output right now (int16 units), for the PDM mics' acoustic bleed. */
-float emu_audio_speaker_now(void) { return I.last_spk; }
+
 
 /* status for the skin: which outputs are audibly playing — 0 none, bit0 speaker,
  * bit1 headphone jack; level 0..1 */

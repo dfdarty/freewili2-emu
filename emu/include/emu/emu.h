@@ -72,6 +72,17 @@ void   emu_uart_attach(unsigned uart, emu_uart_device_t *dev);
 void   emu_uart_to_mcu(unsigned uart, const uint8_t *b, size_t n); /* device -> MCU RX */
 size_t emu_uart_rx_level(unsigned uart);           /* bytes waiting in the MCU's RX FIFO */
 
+/* --------------------------------------------------------------- cores */
+/* Core 1 runs as a coroutine on the host thread (multicore.c). */
+unsigned int emu_get_core_num(void);              /* 0 or 1 */
+void emu_core_tick(void);                          /* emu_poll: switch after a 1 ms slice */
+bool emu_core_idle(uint64_t wake_us);              /* wait loops: false = no other core, sleep as usual */
+bool emu_core_irqs_off(unsigned core);             /* that core's PRIMASK */
+bool emu_in_service(void);                         /* inside emu_poll's device servicing */
+bool emu_set_board_id(const char *hex16);          /* --board-id */
+void emu_irq_raise_core(unsigned core, unsigned irq); /* a per-core source (SIO FIFO, doorbell) */
+void emu_irq_deliver_pending(void);                /* run IRQs held for the current core */
+
 /* ---------------------------------------------------------- bus timing */
 /* SPI and I2C transfers occupy their bus for as long as they would on the
  * wire at the rate the app configured; blocking calls wait for it and DMA to
@@ -165,7 +176,7 @@ void  emu_audio_set_wav_out(const char *path);
 void  emu_audio_set_mic_wav(const char *path);      /* external sound reaching the mics */
 void  emu_audio_set_mic_level(float gain);
 float emu_audio_scene_at(double t_seconds, float speaker_bleed, uint32_t *rng);
-float emu_audio_speaker_now(void);
+float emu_audio_speaker_at(double t_seconds);       /* what the speaker played at t (int16 units) */
 void  emu_pdm_init(void);
 void  emu_pdm_task(void);
 bool  emu_audio_set(const char *name, int n, const float *v); /* "tone" hz amp | "miclevel" g */

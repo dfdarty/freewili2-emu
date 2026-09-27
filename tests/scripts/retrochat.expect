@@ -1,0 +1,3 @@
+core 1: launched
+rc: rx from 15
+!rc: .*qdrop=[1-9]

@@ -55,7 +55,7 @@ display (SSH, a container)? The emulator notices and runs headless.
   `docker build -t freewili2-emu .`
 
 It can't run `.uf2` files (apps are rebuilt from source), and it doesn't model
-radios, the second core, USB host, DVI output or real-time performance — check those on the
+radios, USB host, DVI output or the CPU's real speed — check those on the
 board. Or open the repository in **GitHub Codespaces** for a ready-made
 environment. See [Install and run](https://dfdarty.github.io/freewili2-emu/getting-started/).
 
@@ -65,9 +65,12 @@ environment. See [Install and run](https://dfdarty.github.io/freewili2-emu/getti
   codec with speaker and jack, four PDM microphones, power zones, charger
   status and 8 MB PSRAM — modelled at the bus and protocol level, so
   WiliBSP's drivers run as shipped.
-- 12 of WiliBSP's 17 example apps run, including the SD card, header GPIO
-  and VIO apps over the MAIN processor link (OneWili). The second core
-  (`retrochat`) is next, then the radios. [Details](https://dfdarty.github.io/freewili2-emu/compatibility/).
+- Both RP2350 cores (`pico/multicore.h`, FIFOs, locks, queues), and SPI/I2C
+  at their real clock rates with a live bus-load readout, so an app that
+  draws faster than the LCD bus allows is slow here too.
+- 13 of WiliBSP's 17 example apps run, including the SD card, header GPIO
+  and VIO apps over the MAIN processor link (OneWili), and `retrochat` on
+  both cores. The radios are next. [Details](https://dfdarty.github.io/freewili2-emu/compatibility/).
 - WiliBSP's `fw.py press / touch / type / screenshot` work against it over RTT,
   for apps that call `agentio_init()` (as on the board).
 - `fw2emu hwcheck` builds your app with the real Pico SDK and Arm GCC and

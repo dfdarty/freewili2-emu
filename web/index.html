@@ -451,6 +451,17 @@
       check: 'The log shows “mic A: rms=… peak=…” for each channel about three times a second.',
       panels: ['sound', 'log'],
     },
+    retrochat: {
+      what: 'A chat app that sends text as sound (1200/2200 Hz tones, like an old modem) from the speaker and decodes it from the microphones. The decoder runs on the RP2350’s second core.',
+      see: 'A status bar (LISTENING, error count E, mic level S, this device’s ID), canned messages, and the chord keyboard along the bottom.',
+      tryit: [
+        { label: 'Self-test on', run: () => send('touch 240 10 1300'), text: '— a 1.3 s press on the status bar. It turns to SELFTEST: the device now listens to its own speaker.' },
+        { label: 'Send HI', run: () => send('touch 80 228 150'), text: '— about a second of warble (click the page first to hear it), then “15 HI” arrives as a received line: speaker → air → mics → core 1 → screen.' },
+        { text: 'Two devices can talk too: record one with --audio-out and play it into another with --mic-wav (see the docs).' },
+      ],
+      check: 'The log shows “core 1: launched”, then “rc: tx 16 bytes …” and “rc: rx from 15 len=2”.',
+      panels: ['log', 'sound'],
+    },
     hello_psram_exec: {
       what: 'An app whose code runs from the 8 MB PSRAM instead of SRAM (WiliBSP’s fw2_psram_app()), plus a power-cycle of the RGB LED rail.',
       see: 'About 3 s of start-up, the LED rail switching off and on, then “EXECUTING FROM PSRAM”.',

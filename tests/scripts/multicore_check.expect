@@ -1,0 +1,4 @@
+mc: PASS
+!mc: FAIL
+core 1: its entry function returned
+mc: board id E6616408432A7B15

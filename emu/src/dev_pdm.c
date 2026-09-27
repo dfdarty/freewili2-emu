@@ -94,7 +94,7 @@ static inline int sdm_step(sdm_t *s, float x) {
  * 0.5 of the modulator's range, so a full-scale WAV decimates to ~±8192 PCM
  * without driving the 2nd-order loop into overload. */
 static void update_inputs(double t) {
-    float s = emu_audio_scene_at(t, emu_audio_speaker_now() * 0.2f, &P.scene_rng) / 65536.0f;
+    float s = emu_audio_scene_at(t, emu_audio_speaker_at(t) * 0.2f, &P.scene_rng) / 65536.0f;
     for (int m = 0; m < NMICS; m++) {
         /* independent self-noise per capsule (~-67 dBFS after decimation) */
         sdm_t *d = &P.sdm[m];

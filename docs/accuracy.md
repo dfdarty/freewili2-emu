@@ -25,6 +25,7 @@ attaches a model to each bus, register block or wire protocol:
 | 4 × PDM microphones on pio1 | `dev_pdm.c` | shared 1.024 MHz clock, 2 data lines × 2 clock phases, bit-packed like WiliBSP's `pdm_capture` program; one sigma-delta modulator per mic; free-running ring DMA; off unless MIC_PWR is on |
 | SEGGER RTT | `rtt.c` | `DIAG()` to stdout; TCP on :9090 / :9091 for WiliBSP's tools |
 | PSRAM | `sdk_periph.c` | 8 MB at the real address, `0x11000000` |
+| Core 1 and the SIO | `multicore.c`, `sdk_sync.c` | `pico/multicore.h` (launch, reset, 4-deep FIFOs, lockout, doorbells), per-core interrupt enables and masking, spin locks, mutexes, semaphores, queues ([details](#the-second-core)) |
 
 ## Close to the hardware
 
@@ -77,7 +78,43 @@ attaches a model to each bus, register block or wire protocol:
   analyzer. Those OneWili commands return a failure instead of hanging.
 - The radios: the CC1101 sub-GHz radio, LoRa, Wi-Fi/Bluetooth, NFC/RFID and
   infrared.
-- The second core (`pico/multicore.h`), USB host, and DVI output (stubbed).
+- USB host and DVI output (stubbed).
+
+## The second core
+
+`multicore_launch_core1()` starts core 1 for real, and the SDK's inter-core
+API behaves as on the chip: the 4-deep FIFOs in each direction, the FIFO and
+doorbell interrupts, `multicore_lockout_*`, spin locks, `mutex_t`,
+`semaphore_t`, `critical_section_t` and `pico/util/queue.h`. Interrupts are
+per core: a handler runs on the core that enabled the line, and
+`save_and_disable_interrupts()` holds them pending on that core until it
+restores them. SDK alarms run on core 0, where the default alarm pool lives.
+
+The two cores take turns on one host thread. A core hands over whenever it
+waits — `sleep_ms()`, `tight_loop_contents()`, or any blocking FIFO, lock,
+mutex, semaphore or queue call — and after running for 1 ms, at its next
+SDK call (reading the time counts). When both wait, the PC sleeps. This has
+two consequences:
+
+- **A loop that spins on a plain variable with no SDK call in it never lets
+  the other core run**, so it hangs here even though it works on the board:
+
+    ```c
+    while (!core1_ready) { }                         // hangs in the emulator
+    while (!core1_ready) tight_loop_contents();      // works in both
+    ```
+
+    The second form is what the SDK's own examples do, and costs nothing on
+    the board.
+- **Races that need both cores in the same few instructions don't show up.**
+  Races that need a core to be interrupted at an SDK call do. Protect shared
+  data as you would on the board (a spin lock, mutex or queue), and test
+  timing-sensitive sharing on hardware.
+
+A core that waits for a non-recursive mutex it already holds hangs, as on
+the board, and the log says so once. `pico_get_unique_board_id()` returns
+`E6616408432A7B15` unless the run gives `--board-id`, so two emulators can
+tell each other apart.
 
 See [App compatibility](compatibility.md) for how this maps onto WiliBSP's
 example apps.

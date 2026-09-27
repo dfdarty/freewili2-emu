@@ -4,7 +4,7 @@ WiliBSP ships 17 example apps. They are the best measure of how much of the
 board the emulator covers: each one below either runs unmodified, or is
 blocked by a part that isn't modelled yet.
 
-**12 of 17 run.** On every push, CI runs each of them headless with its
+**13 of 17 run.** On every push, CI runs each of them headless with its
 script in `tests/scripts/` (natively, with sanitizers and as a 32-bit build),
 and builds all of them for the board with
 [`fw2emu hwcheck`](debugging.md#real-hardware-check-toolsfw2emu-hwcheck)
@@ -27,7 +27,7 @@ there.
 | `hello_sdcard` | ✅ runs | SD card on the MAIN CPU over OneWili: mkdir, appends, stat, read, list ([MAIN link](main-link.md)) |
 | `toggleled` | ✅ runs | header GPIO 25 toggled over OneWili, VIO select ² |
 | `hello_vref` | ✅ runs | VIO select measured on the display ADC, GPIO read-back over OneWili ² |
-| `retrochat` | ❌ | needs `pico/multicore.h` (a second core) and `pico/unique_id.h` |
+| `retrochat` | ✅ runs | the [second core](accuracy.md#the-second-core) (its modem decoder), speaker → air → microphones, `pico/unique_id.h`; the acoustic self-test decodes its own "HI" |
 | `hello_ir` | ❌ | needs the infrared transmitter and receiver |
 | `hello_cc1101` | ❌ | needs the CC1101 sub-GHz radio |
 | `hello_usbdrive` | ❌ | needs USB host and a USB drive |
@@ -52,10 +52,10 @@ them stops happening, hwcheck warns so the list can be updated.
 
 ## Planned order
 
-1. **The second core** — `retrochat`. This is next.
-2. **The radios** — infrared (`hello_ir`), then the CC1101 (`hello_cc1101`).
-3. **USB host** and **DVI**.
-4. **More of the MAIN CPU** over OneWili (CAN, analog inputs, the bus
+1. **The radios** — infrared (`hello_ir`), then the CC1101 (`hello_cc1101`).
+   This is next.
+2. **USB host** and **DVI**.
+3. **More of the MAIN CPU** over OneWili (CAN, analog inputs, the bus
    bridges): the link is in place, and each one is a new set of commands in
    `emu/src/dev_main.c`.
 

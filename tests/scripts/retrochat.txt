@@ -1,0 +1,12 @@
+# retrochat: acoustic self-test. The app sends "HI" as AFSK through the
+# speaker and decodes it on core 1 from the PDM mics, which hear the speaker.
+wait 2500                  # board_init, codec and mic power-up
+expect "rc: up" 3000
+touch 240 10 1300          # long-press the status bar (>= 1 s): self-test on
+expect "rc: selftest=1" 2000
+touch 80 228 150           # the HI button
+expect "rc: tx [0-9]+ bytes" 3000
+expect "rc: rx from 15 len=2" 8000   # decoded its own transmission
+wait 300
+screenshot out/retrochat.png
+quit

@@ -95,7 +95,8 @@ void panic_unsupported(void) __attribute__((noreturn));
 #define invalid_params_if(x, test) do { if (test) panic("invalid params: " #test); } while (0)
 #define valid_params_if(x, test) ((void)0)
 
-static inline uint get_core_num(void) { return 0; }
+uint emu_get_core_num(void);                    /* 0 or 1: the core running this code */
+static inline uint get_core_num(void) { return emu_get_core_num(); }
 
 #ifdef __cplusplus
 }

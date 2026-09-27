@@ -374,12 +374,24 @@ static void perf_task(uint64_t now_us) {
 }
 
 /* ------------------------------------------------------------ poll/yield */
+bool emu_in_service(void) { return s_in_poll; }
+
 void emu_poll(void) {
     if (s_in_poll) return;
+    emu_core_tick();                                   /* may run core 1 for a while */
     s_in_poll = true;
     emu_dma_timed_task();                              /* not rate-limited: DMA-done IRQs are prompt */
     s_in_poll = false;
+    emu_irq_deliver_pending();                         /* IRQs held for this core */
     uint64_t now = emu_time_us();
+    /* SDK alarms fire on core 0, where the default alarm pool's IRQ lives. */
+    static uint64_t last_timers_us;
+    if (emu_get_core_num() == 0 && now - last_timers_us >= 1000u) {
+        last_timers_us = now;
+        s_in_poll = true;
+        emu_timers_task();
+        s_in_poll = false;
+    }
     if (now - s_last_service_us < 1000u) return;       /* service at most 1 kHz */
     s_in_poll = true;
     s_last_service_us = now;
@@ -389,7 +401,6 @@ void emu_poll(void) {
     emu_pdm_task();
     emu_pic_task();
     emu_main_task();
-    emu_timers_task();
     emu_rtt_task();
     emu_script_task();
     perf_task(now);
@@ -421,6 +432,7 @@ void emu_sleep_us(uint64_t us) {
         emu_poll();
         uint64_t now = emu_time_us();
         if (now >= end) return;
+        if (emu_core_idle(end)) continue;              /* the other core runs meanwhile */
         uint64_t left = end - now;
 #ifdef __EMSCRIPTEN__
         /* Every browser timer turn costs >=4 ms, so yield once per chunk (up
@@ -439,6 +451,7 @@ void emu_sleep_us(uint64_t us) {
 
 void tight_loop_contents(void) {
     emu_poll();
+    if (emu_core_idle(0)) return;                      /* the other core had a turn */
 #ifndef __EMSCRIPTEN__
     os_sleep_us(20);                                   /* keep idle spins off 100% CPU */
 #endif
@@ -510,6 +523,7 @@ static void usage(void) {
         "  --audio-out WAV     record everything the codec plays\n"
         "  --mic-wav WAV       sound reaching the microphones (looped)\n"
         "  --mute              don't play audio through the PC\n"
+        "  --board-id HEX16    the RP2350's 64-bit unique id (default E6616408432A7B15)\n"
         "  --perf              log bus load and LCD throughput once a second\n"
         "  --instant-bus       SPI/I2C transfers take no time (to compare against the old, untimed model)\n"
         "  --sdcard DIR        folder that stands in for the SD card (default ./sdcard; 'none' = no card)\n"
@@ -547,6 +561,9 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--mic-wav") && i + 1 < argc) emu_audio_set_mic_wav(argv[++i]);
         else if (!strcmp(a, "--mute")) s_mute = true;
         else if (!strcmp(a, "--perf")) s_perf_log = true;
+        else if (!strcmp(a, "--board-id") && i + 1 < argc) {
+            if (!emu_set_board_id(argv[++i])) { fprintf(stderr, "bad --board-id %s (16 hex digits)\n", argv[i]); return 2; }
+        }
         else if (!strcmp(a, "--instant-bus")) emu_bus_timing = false;
         else if (!strcmp(a, "--sdcard") && i + 1 < argc) sdcard = argv[++i];
         else if (!strcmp(a, "-v")) emu_verbose = 1;

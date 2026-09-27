@@ -104,6 +104,8 @@ add_library(freewili2_bsp STATIC
     # --- emulator ---
     emu/src/core.c
     emu/src/sdk_periph.c
+    emu/src/sdk_sync.c
+    emu/src/multicore.c
     emu/src/dev_lcd.c
     emu/src/dev_touch.c
     emu/src/dev_leds.c
@@ -190,7 +192,8 @@ endif()
 # all provided by the shim inside freewili2_bsp.
 foreach(_lib pico_stdlib hardware_uart hardware_gpio hardware_adc hardware_i2c
              hardware_spi hardware_dma hardware_pio hardware_pwm hardware_irq
-             hardware_clocks hardware_timer hardware_sync pico_time)
+             hardware_clocks hardware_timer hardware_sync pico_time
+             pico_multicore pico_unique_id pico_sync pico_util hardware_sync_spin_lock)
     add_library(${_lib} INTERFACE)
     target_link_libraries(${_lib} INTERFACE freewili2_bsp)
 endforeach()
@@ -208,7 +211,7 @@ add_subdirectory("${WILIBSP_DIR}/libs/onewili" "${CMAKE_BINARY_DIR}/wilibsp/onew
 # WiliBSP's own apps, built straight from the submodule with their own
 # CMakeLists.txt. Your apps go in apps/ (see apps/README.md).
 set(_fw2_upstream_default template hello_display hello_agentio hello_sensors hello_audio hello_mics
-    hello_keyboard hello_charger hello_psram_exec hello_sdcard toggleled hello_vref)
+    hello_keyboard hello_charger hello_psram_exec hello_sdcard toggleled hello_vref retrochat)
 # Build trees configured before the list grew keep a cached copy of an older
 # default. Every older default is a leading part of this list (it only ever
 # grew at the end), so move exactly those to the new one.
