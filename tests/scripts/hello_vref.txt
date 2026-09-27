@@ -1,0 +1,6 @@
+# hello_vref: VREF sweep measured on the display ADC, then MAIN-CPU GPIO 25
+# toggled every 2 s over OneWili and read back with read_all.
+wait 7000
+header
+screenshot out/hello_vref.png
+quit

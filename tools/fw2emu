@@ -58,7 +58,7 @@ def default_apps():
     """The apps the emulator builds: FW2_EMU_UPSTREAM_APPS plus apps/*."""
     with open(os.path.join(ROOT, "CMakeLists.txt")) as f:
         text = f.read()
-    m = re.search(r"set\(FW2_EMU_UPSTREAM_APPS\s+(.*?)\s+CACHE", text, re.S)
+    m = re.search(r"set\(_fw2_upstream_default\s+(.*?)\)", text, re.S)
     names = m.group(1).split() if m else []
     out = [os.path.join(WILIBSP, "apps", n) for n in names]
     local = os.path.join(ROOT, "apps")
@@ -445,9 +445,9 @@ def build_one_app(app_dir, build, cmake_args, web=False):
     if len(targets) > 1:
         print(f"fw2emu: {app_dir} defines {', '.join(targets)}; using {target}", file=sys.stderr)
     if not os.path.isfile(os.path.join(WILIBSP, "bsp", "fw2.h")):
-        die("WiliBSP is missing; run: git submodule update --init")
+        die("WiliBSP is missing; run: git submodule update --init --recursive")
     cfg = ["cmake", "-S", ROOT, "-B", build] + _generator() + [
-        "-DFW2_EMU_UPSTREAM_APPS=", "-DFW2_EMU_LOCAL_APPS=OFF",
+        "-DFW2_EMU_UPSTREAM_APPS=", "-DFW2_EMU_LOCAL_APPS=OFF", "-DFW2_EMU_TEST_APPS=OFF",
         f"-DFW2_EMU_EXTRA_APPS={app_dir}"] + cmake_args
     if web:
         cfg = ["emcmake"] + cfg

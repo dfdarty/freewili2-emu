@@ -59,10 +59,18 @@ typedef struct emu_uart_device {
     const char *name;
     void (*rx_from_mcu)(struct emu_uart_device *d, const uint8_t *b, size_t n);
     void (*break_changed)(struct emu_uart_device *d, bool on);
+    /* Optional: called whenever the MCU checks for received data, so a model
+     * can pace its transmit at the wire rate (NULL = deliver immediately). */
+    void (*poll)(struct emu_uart_device *d);
     void *ctx;
 } emu_uart_device_t;
-void emu_uart_attach(unsigned uart, emu_uart_device_t *dev);
-void emu_uart_to_mcu(unsigned uart, const uint8_t *b, size_t n); /* device -> MCU RX */
+void   emu_uart_attach(unsigned uart, emu_uart_device_t *dev);
+void   emu_uart_to_mcu(unsigned uart, const uint8_t *b, size_t n); /* device -> MCU RX */
+size_t emu_uart_rx_level(unsigned uart);           /* bytes waiting in the MCU's RX FIFO */
+
+/* ---------------------------------------------------------------- misc */
+void  emu_timers_task(void);                       /* SDK alarms / repeating timers */
+float emu_adc_input_volts(unsigned input);         /* board voltage at ADC input n (GPIO 40+n) */
 
 /* ----------------------------------------------------------------- dma */
 void   emu_dma_uart_rx_deliver(unsigned uart, const uint8_t *b, size_t n, size_t *taken);
@@ -145,6 +153,24 @@ bool  emu_audio_set(const char *name, int n, const float *v); /* "tone" hz amp |
 bool  emu_pdm_set(const char *name, int n, const float *v);   /* "mics" a,b,c,d | "mic.A" g */
 void  emu_pdm_describe(char *out, size_t cap);
 int   emu_audio_status(float *level);               /* bit0 speaker, bit1 jack */
+
+/* MAIN CPU (the other RP2350): OneWili console, SDFS server, header GPIO,
+ * VIO / programmable Vout. Reached over UART0 (the FwGUI display link). */
+#define EMU_HEADER_PINS 13
+typedef struct {
+    uint8_t gpio;             /* MAIN-CPU GPIO number                      */
+    bool    output;           /* driven by MAIN (s/l/t/p)                  */
+    bool    pwm;              /* PWM output                                */
+    bool    level;            /* pad level as MAIN reads it               */
+    bool    ext;              /* driven from outside (script/--sensor)     */
+} emu_header_pin_t;
+void  emu_main_init(const char *sdcard_dir);        /* NULL = default ./sdcard, "none" = no card */
+void  emu_main_task(void);
+bool  emu_main_set(const char *name, int n, const float *v); /* "gpioN" 0|1|-1, "vrefext" volts */
+int   emu_main_header(emu_header_pin_t out[EMU_HEADER_PINS]);
+float emu_main_vio(void);                           /* header VIO rail, volts */
+float emu_main_vout(void);                          /* programmable Vout, volts */
+bool  emu_main_sd_active(void);                     /* SD request in the last ~150 ms */
 
 /* SEGGER RTT back end */
 void emu_rtt_init(bool tcp);

@@ -146,7 +146,7 @@ bool emu_audio_set(const char *name, int n, const float *v) {
         return true;
     }
     if (!strcasecmp(name, "miclevel") && n >= 1) { s_mic_level = v[0]; return true; }
-    return false;
+    return emu_main_set(name, n, v);             /* gpioN / vrefext (MAIN-CPU header) */
 }
 
 /* The acoustic scene at the device at time t (seconds): the --mic-wav

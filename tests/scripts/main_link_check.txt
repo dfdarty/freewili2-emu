@@ -1,0 +1,6 @@
+# main_link_check: emulator self-test of the MAIN-CPU link (SD, GPIO, Vout).
+# Header GPIO 9 is driven high from outside before the checks run.
+set gpio9 1
+wait 9000
+screenshot out/main_link_check.png device
+quit

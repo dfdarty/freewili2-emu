@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.20)
 
 # freewili2-emu — run FREE-WILi 2 (WiliBSP) apps on a PC or in a browser.
 #
@@ -112,6 +112,7 @@ add_library(freewili2_bsp STATIC
     emu/src/dev_sensors.c
     emu/src/dev_audio.c
     emu/src/dev_pdm.c
+    emu/src/dev_main.c
     emu/src/rtt.c
     emu/src/script.c
     emu/src/skin.c
@@ -156,10 +157,44 @@ endif()
 
 include(cmake/fw2_emu_app.cmake)
 
+# Pico SDK library names that WiliBSP code links against. On the host they are
+# all provided by the shim inside freewili2_bsp.
+foreach(_lib pico_stdlib hardware_uart hardware_gpio hardware_adc hardware_i2c
+             hardware_spi hardware_dma hardware_pio hardware_pwm hardware_irq
+             hardware_clocks hardware_timer hardware_sync pico_time)
+    add_library(${_lib} INTERFACE)
+    target_link_libraries(${_lib} INTERFACE freewili2_bsp)
+endforeach()
+
+# WiliBSP's OneWili client (libs/onewili: the MAIN-CPU link used by
+# hello_sdcard, toggleled, hello_vref), built unmodified from its own
+# CMakeLists.txt. emu/src/dev_main.c is the MAIN CPU it talks to.
+if(NOT EXISTS "${WILIBSP_DIR}/libs/onewili/CMakeLists.txt")
+    message(FATAL_ERROR "WiliBSP's nested libs/onewili submodule is missing (the MAIN-CPU link). Run:\n"
+                        "  git submodule update --init --recursive")
+endif()
+add_subdirectory("${WILIBSP_DIR}/libs/onewili" "${CMAKE_BINARY_DIR}/wilibsp/onewili")
+
 # ------------------------------------------------------------------ apps
 # WiliBSP's own apps, built straight from the submodule with their own
 # CMakeLists.txt. Your apps go in apps/ (see apps/README.md).
-set(FW2_EMU_UPSTREAM_APPS template hello_display hello_agentio hello_sensors hello_audio hello_mics hello_keyboard hello_charger hello_psram_exec CACHE STRING "WiliBSP apps to build")
+set(_fw2_upstream_default template hello_display hello_agentio hello_sensors hello_audio hello_mics
+    hello_keyboard hello_charger hello_psram_exec hello_sdcard toggleled hello_vref)
+# Build trees configured before the list grew keep a cached copy of an older
+# default. Every older default is a leading part of this list (it only ever
+# grew at the end), so move exactly those to the new one.
+if(DEFINED CACHE{FW2_EMU_UPSTREAM_APPS})
+    set(_cached "$CACHE{FW2_EMU_UPSTREAM_APPS}")
+    list(LENGTH _cached _n)
+    list(LENGTH _fw2_upstream_default _nd)
+    if(_n GREATER_EQUAL 3 AND _n LESS _nd)
+        list(SUBLIST _fw2_upstream_default 0 ${_n} _prefix)
+        if("${_prefix}" STREQUAL "${_cached}")
+            set(FW2_EMU_UPSTREAM_APPS "${_fw2_upstream_default}" CACHE STRING "WiliBSP apps to build" FORCE)
+        endif()
+    endif()
+endif()
+set(FW2_EMU_UPSTREAM_APPS ${_fw2_upstream_default} CACHE STRING "WiliBSP apps to build")
 foreach(_app IN LISTS FW2_EMU_UPSTREAM_APPS)
     add_subdirectory("${WILIBSP_DIR}/apps/${_app}" "${CMAKE_BINARY_DIR}/wilibsp/${_app}")
 endforeach()
@@ -168,6 +203,22 @@ option(FW2_EMU_LOCAL_APPS "Build every app in apps/" ON)
 if(FW2_EMU_LOCAL_APPS)
     file(GLOB _local_apps LIST_DIRECTORIES true "${CMAKE_CURRENT_SOURCE_DIR}/apps/*")
     foreach(_dir IN LISTS _local_apps)
+        if(IS_DIRECTORY "${_dir}" AND EXISTS "${_dir}/CMakeLists.txt")
+            add_subdirectory("${_dir}")
+        endif()
+    endforeach()
+endif()
+
+# Emulator self-tests that run as apps (tests/apps/*), used by tests/smoke.sh.
+if(EMSCRIPTEN)
+    set(_test_apps_default OFF)
+else()
+    set(_test_apps_default ON)
+endif()
+option(FW2_EMU_TEST_APPS "Build the self-test apps in tests/apps/" ${_test_apps_default})
+if(FW2_EMU_TEST_APPS)
+    file(GLOB _test_apps LIST_DIRECTORIES true "${CMAKE_CURRENT_SOURCE_DIR}/tests/apps/*")
+    foreach(_dir IN LISTS _test_apps)
         if(IS_DIRECTORY "${_dir}" AND EXISTS "${_dir}/CMakeLists.txt")
             add_subdirectory("${_dir}")
         endif()

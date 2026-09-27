@@ -52,6 +52,11 @@
                font-size: 13px; line-height: 1.5; }
   #demo-note[hidden] { display: none; }
   #demo-note code { font-size: 12px; }
+  .pins { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  .pins button { padding: 3px 0; width: 42px; font-size: 12px; }
+  .pins button.hi { border-color: #4a86e8; background: #1d3050; }
+  .pins button.lo { border-color: #4a86e8; }
+  .note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
   header a.docs { text-decoration: none; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
 </style>
 </head>
@@ -92,6 +97,15 @@
     <div class="card">
       <h2>Sound in the room</h2>
       <div class="sl" id="sound"></div>
+    </div>
+    <div class="card">
+      <h2>GPIO header inputs</h2>
+      <div class="pins" id="pins"></div>
+      <div class="sl"><label for="vrefext">Trig_IN/VREF</label><select id="vrefext">
+        <option value="-1">nothing</option><option>1.8</option><option>3.3</option><option>5.0</option>
+      </select><span></span></div>
+      <p class="note">Click a pin to drive it from outside: open → high → low. The SD card is
+        held in memory and starts fresh on every load.</p>
     </div>
     <div class="card">
       <h2>RTT diagnostics</h2>
@@ -226,6 +240,22 @@
     });
     sbox.append(lab, inp, out);
   }
+
+  // ---- MAIN-CPU header pins driven from outside (read by ow_io_gpio_read_all)
+  const pbox = document.getElementById('pins');
+  for (const g of [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 25, 26, 27]) {
+    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: String(g),
+                                                                title: `GPIO ${g}: not driven` });
+    let st = -1;
+    b.addEventListener('click', () => {
+      st = st === -1 ? 1 : st === 1 ? 0 : -1;
+      b.className = st === 1 ? 'hi' : st === 0 ? 'lo' : '';
+      b.title = `GPIO ${g}: ${st === -1 ? 'not driven' : st ? 'driven high' : 'driven low'}`;
+      send(`set gpio${g} ${st}`);
+    });
+    pbox.append(b);
+  }
+  document.getElementById('vrefext').addEventListener('change', e => send(`set vrefext ${e.target.value}`));
 
   const s = document.createElement('script');
   s.src = `${current.name}.js`;

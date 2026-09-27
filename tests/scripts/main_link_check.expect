@@ -1,0 +1,2 @@
+main_link_check: [0-9]+ checks, 0 failed
+!check: FAIL

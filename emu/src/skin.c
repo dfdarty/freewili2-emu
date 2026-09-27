@@ -141,6 +141,53 @@ static void draw_lcd(void) {
     }
 }
 
+/* User GPIO header (MAIN CPU, via OneWili): one square per pin, the VIO rail
+ * that powers the level shifters, the programmable Vout and SD activity. */
+#define HDR_X 40
+#define HDR_Y 318
+typedef struct {
+    emu_header_pin_t pin[EMU_HEADER_PINS];
+    int vio_cv, vout_cv;          /* centivolts */
+    bool sd;
+} header_view_t;
+
+static void header_view(header_view_t *h) {
+    memset(h, 0, sizeof *h);
+    emu_main_header(h->pin);
+    h->vio_cv = (int)(emu_main_vio() * 100.0f + 0.5f);
+    h->vout_cv = (int)(emu_main_vout() * 100.0f + 0.5f);
+    h->sd = emu_main_sd_active();
+    for (int i = 0; i < EMU_HEADER_PINS; i++) if (h->pin[i].pwm) h->pin[i].level = false;  /* no flicker */
+}
+
+static void draw_header(const header_view_t *h) {
+    char s[40];
+    rrect(HDR_X, HDR_Y, 152, 132, 8, 0x1a1d22);
+    text(HDR_X + 8, HDR_Y + 8, 1, 0x9aa1ac, "GPIO HEADER");
+    bool vio = h->vio_cv >= 100;
+    snprintf(s, sizeof s, "VIO %d.%02dV", h->vio_cv / 100, h->vio_cv % 100);
+    text(HDR_X + 8, HDR_Y + 20, 1, vio ? 0x4cc38a : 0xd08a3a, vio ? s : "VIO OFF: PINS DEAD");
+    for (int i = 0; i < EMU_HEADER_PINS; i++) {
+        const emu_header_pin_t *p = &h->pin[i];
+        int row = i < 7 ? 0 : 1, col = i < 7 ? i : i - 7;
+        int x = HDR_X + 8 + col * 20, y = HDR_Y + 36 + row * 34;
+        uint32_t edge = 0x5d636d, fill = 0x22262d;
+        if (p->pwm) { edge = 0xb07cff; fill = vio ? 0x6a4a9a : 0x2e2640; }
+        else if (p->output && p->level) { edge = vio ? 0x4cc38a : 0x8a6d2b; fill = vio ? 0x4cc38a : 0x3a3020; }
+        else if (p->output) { edge = 0x4cc38a; fill = 0x15171b; }
+        else if (p->ext) { edge = 0x4a86e8; fill = p->level ? 0x4a86e8 : 0x15171b; }
+        rect(x, y, 14, 14, edge);
+        rect(x + 2, y + 2, 10, 10, fill);
+        snprintf(s, sizeof s, "%u", (unsigned)p->gpio);
+        text(x + 7 - text_w(s, 1) / 2, y + 17, 1, 0x7d8490, s);
+    }
+    if (h->vout_cv) {
+        snprintf(s, sizeof s, "VOUT %d.%02dV", h->vout_cv / 100, h->vout_cv % 100);
+        text(HDR_X + 8, HDR_Y + 112, 1, 0xe5c34b, s);
+    }
+    text(HDR_X + 124, HDR_Y + 112, 1, h->sd ? 0x4cc38a : 0x3a3f48, "SD");
+}
+
 static void draw_dynamic(const uint32_t leds[EMU_NUM_LEDS], uint16_t held, uint32_t rails, int audio) {
     for (int i = 0; i < EMU_NUM_LEDS; i++) {
         int cx = 290 + i * 21, cy = 58;
@@ -155,6 +202,9 @@ static void draw_dynamic(const uint32_t leds[EMU_NUM_LEDS], uint16_t held, uint3
     for (unsigned z = 1; z <= 17 && n < (int)sizeof line - 16; z++)
         if (rails & (1u << (z - 1))) n += snprintf(line + n, sizeof line - (size_t)n, " %s", emu_zone_name(z));
     text(44, 470, 1, 0x7d8490, line);
+    header_view_t hv;
+    header_view(&hv);
+    draw_header(&hv);
     static const char *const route[4] = { "", "AUDIO: SPEAKER", "AUDIO: 3.5MM JACK", "AUDIO: SPEAKER+JACK" };
     if (audio & 3) text(W - 44 - text_w(route[audio & 3], 1), 470, 1, 0x4cc38a, route[audio & 3]);
 }
@@ -183,6 +233,9 @@ int emu_skin_frame(uint32_t *out) {
     static int p_audio;
     static int p_tx = -1, p_ty = -1;
     static bool p_touch, p_exit;
+    static header_view_t p_hdr;
+    header_view_t hdr;
+    header_view(&hdr);
     uint32_t leds[EMU_NUM_LEDS];
     emu_leds_get(leds);
     uint16_t held = emu_pic_buttons();
@@ -191,7 +244,9 @@ int emu_skin_frame(uint32_t *out) {
     bool touch = emu_touch_get(&tx, &ty);
     bool ex = emu_app_has_exited(NULL);
     int audio = emu_audio_status(NULL);
-    bool panel = first || memcmp(leds, p_leds, sizeof leds) || held != p_held || rails != p_rails || audio != p_audio;
+    bool panel = first || memcmp(leds, p_leds, sizeof leds) || held != p_held || rails != p_rails || audio != p_audio ||
+                 memcmp(&hdr, &p_hdr, sizeof hdr);
+    p_hdr = hdr;
     bool lcd = emu_lcd_changed() || touch != p_touch || (touch && (tx != p_tx || ty != p_ty)) || ex != p_exit;
     memcpy(p_leds, leds, sizeof leds);
     p_held = held; p_rails = rails; p_audio = audio; p_touch = touch; p_tx = tx; p_ty = ty; p_exit = ex;

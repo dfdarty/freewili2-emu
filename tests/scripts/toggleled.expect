@@ -1,0 +1,4 @@
+toggleled: link up, toggling main-CPU GPIO 25
+header VIO 3\.27 V.* 25=1\(out\)
+header VIO 3\.27 V.* 25=0\(out\)
+!toggle failed

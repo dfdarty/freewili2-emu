@@ -1,0 +1,9 @@
+after board_init: ioexp_vref_get\(\) = 3, VIO 4[0-9]{3} mV
+VREF_NONE +-> VIO 2[0-9] mV
+VREF_3V3 +-> VIO 3[23][0-9]{2} mV
+VREF_5V0 +-> VIO 4[0-9]{3} mV
+VREF_PROG_VOUT +-> VIO 2[0-9] mV
+hello_vref: link up, toggling main-CPU GPIO 25 every 2000 ms
+GPIO 25 = 1 \(bitfield 0xe2ff21f3, VIO 3[23][0-9]{2} mV\)
+GPIO 25 = 0 \(bitfield 0xe0ff21f3, VIO 3[23][0-9]{2} mV\)
+!failed

@@ -9,6 +9,7 @@
  *   screenshot FILE [lcd|device]
  *   set NAME V [V V]         sensors: temp rh lux accel gyro mag tilt noise
  *   log TEXT
+ *   header                   log the MAIN-CPU GPIO header state (pins, VIO, Vout)
  *   quit
  * Buttons: GREY YELLOW GREEN BLUE RED CENTER UP DOWN LEFT RIGHT HOME OK CANCEL PAGE
  */
@@ -116,6 +117,15 @@ static void exec(char *line, uint64_t now) {
         const char *rest = raw + 3;
         while (*rest == ' ' || *rest == '\t') rest++;
         emu_log("script: %s", rest);
+    } else if (!strcmp(cmd, "header")) {
+        emu_header_pin_t pins[EMU_HEADER_PINS];
+        char line[400];
+        int n = snprintf(line, sizeof line, "VIO %.2f V, Vout %.2f V;", emu_main_vio(), emu_main_vout());
+        emu_main_header(pins);
+        for (int i = 0; i < EMU_HEADER_PINS && n < (int)sizeof line - 16; i++)
+            n += snprintf(line + n, sizeof line - (size_t)n, " %u=%d%s", (unsigned)pins[i].gpio, pins[i].level,
+                          pins[i].pwm ? "(pwm)" : pins[i].output ? "(out)" : pins[i].ext ? "(ext)" : "");
+        emu_log("script: header %s", line);
     } else if (!strcmp(cmd, "quit")) {
         emu_app_exit("script quit");
     } else {
@@ -132,7 +142,7 @@ bool emu_script_exec_line(const char *line) {
     char *p = buf;
     while (*p == ' ') p++;
     if (!*p || !strncmp(p, "wait", 4) || !strncmp(p, "quit", 4)) return false;
-    static const char *const ok[] = { "press", "hold", "release", "touch", "drag", "set", "log", "screenshot" };
+    static const char *const ok[] = { "press", "hold", "release", "touch", "drag", "set", "log", "screenshot", "header" };
     bool known = false;
     for (size_t i = 0; i < sizeof ok / sizeof ok[0]; i++)
         if (!strncmp(p, ok[i], strlen(ok[i]))) known = true;

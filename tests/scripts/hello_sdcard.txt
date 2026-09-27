@@ -1,0 +1,5 @@
+# hello_sdcard: SD card on the MAIN CPU over OneWili (mkdir, 10 appends,
+# stat, whole-file read, directory listing). The card is out/sdcard-hello_sdcard.
+wait 14500
+screenshot out/hello_sdcard.png
+quit

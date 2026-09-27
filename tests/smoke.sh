@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Build natively and run every app headless with its script. Screenshots land
 # in out/. A tests/scripts/<app>.expect file lists regexes the log must
-# match (one per line). Exit status is non-zero if any app fails to start or crashes.
+# match (one per line; a line starting with ! is a regex it must NOT match, and
+# "@sd PATH REGEX" checks a file the app left on its SD card).
+# Each app gets a fresh SD card folder, out/sdcard-<app>. Exit status is
+# non-zero if any app fails to start or crashes.
 #
 #   BUILD_DIR=build-asan CMAKE_ARGS="-DFW2_EMU_SANITIZE=ON" tests/smoke.sh
 set -euo pipefail
@@ -15,12 +18,21 @@ fail=0
 for s in tests/scripts/*.txt; do
     app=$(basename "$s" .txt)
     [ -x "$build/bin/$app" ] || { echo "skip $app (not built)"; continue; }
-    if timeout 60 "$build/bin/$app" --headless --script "$s" --audio-out "out/$app.wav" > "out/$app.log" 2>&1; then
+    rm -rf "out/sdcard-$app"
+    if timeout 60 "$build/bin/$app" --headless --script "$s" --audio-out "out/$app.wav" \
+            --sdcard "out/sdcard-$app" > "out/$app.log" 2>&1; then
         exp="tests/scripts/$app.expect"
         if [ -f "$exp" ]; then
             while IFS= read -r re; do
                 [ -z "$re" ] || [[ "$re" == \#* ]] && continue
-                grep -Eq -- "$re" "out/$app.log" || { echo "FAIL $app (log lacks /$re/)"; fail=1; continue 2; }
+                if [[ "$re" == @sd\ * ]]; then
+                    read -r _ f fre <<< "$re"
+                    grep -Eq -- "$fre" "out/sdcard-$app/$f" 2>/dev/null || { echo "FAIL $app (SD file $f lacks /$fre/)"; fail=1; continue 2; }
+                elif [[ "$re" == !* ]]; then
+                    ! grep -Eq -- "${re:1}" "out/$app.log" || { echo "FAIL $app (log has /${re:1}/)"; fail=1; continue 2; }
+                else
+                    grep -Eq -- "$re" "out/$app.log" || { echo "FAIL $app (log lacks /$re/)"; fail=1; continue 2; }
+                fi
             done < "$exp"
         fi
         echo "ok   $app"
