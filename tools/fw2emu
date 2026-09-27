@@ -85,7 +85,64 @@ def check_app_dir(d):
 # --------------------------------------------------------------------- toolchain / SDK
 
 
-def find_toolchain(explicit=None):
+ARM_TOOLCHAIN_RELEASE = "14.2.rel1"        # = WiliBSP's PICO_TOOLCHAIN_VERSION 14_2_Rel1
+ARM_TOOLCHAIN_URL = ("https://developer.arm.com/-/media/Files/downloads/gnu/{rel}/binrel/"
+                     "arm-gnu-toolchain-{rel}-{arch}-arm-none-eabi.tar.xz")
+
+
+def _arm_toolchain_name():
+    import platform
+    arch = {"x86_64": "x86_64", "amd64": "x86_64", "aarch64": "aarch64", "arm64": "aarch64"}.get(
+        platform.machine().lower())
+    if not arch or not sys.platform.startswith("linux"):
+        return None
+    return f"arm-gnu-toolchain-{ARM_TOOLCHAIN_RELEASE}-{arch}-arm-none-eabi", arch
+
+
+def fetch_toolchain():
+    """Download the Arm GNU Toolchain 14.2.Rel1 into the cache (Linux x86_64/aarch64), verify its SHA-256."""
+    import hashlib
+    import tarfile
+    import urllib.request
+    na = _arm_toolchain_name()
+    if not na:
+        die("--fetch-toolchain supports Linux x86_64 / aarch64; install the Arm GNU Toolchain "
+            f"{ARM_TOOLCHAIN_RELEASE} yourself and pass --toolchain")
+    name, arch = na
+    dest = os.path.join(CACHE, name)
+    if os.access(os.path.join(dest, "bin", "arm-none-eabi-gcc"), os.X_OK):
+        return dest
+    url = ARM_TOOLCHAIN_URL.format(rel=ARM_TOOLCHAIN_RELEASE, arch=arch)
+    os.makedirs(CACHE, exist_ok=True)
+    archive = dest + ".tar.xz"
+    print(f"fw2emu: downloading {url}", file=sys.stderr, flush=True)
+    try:
+        with urllib.request.urlopen(url + ".sha256asc") as r:
+            want = r.read().decode().split()[0].lower()
+        h = hashlib.sha256()
+        with urllib.request.urlopen(url) as r, open(archive, "wb") as f:
+            while True:
+                chunk = r.read(1 << 20)
+                if not chunk:
+                    break
+                h.update(chunk)
+                f.write(chunk)
+    except OSError as e:
+        die(f"download failed: {e}")
+    if h.hexdigest() != want:
+        os.unlink(archive)
+        die(f"checksum mismatch for {url}")
+    tmp = dest + ".partial"
+    shutil.rmtree(tmp, ignore_errors=True)
+    with tarfile.open(archive) as t:
+        t.extractall(tmp, **({"filter": "tar"} if hasattr(tarfile, "tar_filter") else {}))
+    os.rename(os.path.join(tmp, name), dest)
+    shutil.rmtree(tmp, ignore_errors=True)
+    os.unlink(archive)
+    return dest
+
+
+def find_toolchain(explicit=None, fetch=False):
     """Directory holding arm-none-eabi-gcc, or exit with instructions."""
     cands = []
     if explicit:
@@ -93,17 +150,23 @@ def find_toolchain(explicit=None):
     if os.environ.get("PICO_TOOLCHAIN_PATH"):
         cands.append(os.environ["PICO_TOOLCHAIN_PATH"])
     cands.append(os.path.expanduser(f"~/.pico-sdk/toolchain/{PICO_TOOLCHAIN_VERSION}"))
+    na = _arm_toolchain_name()
+    if na:
+        cands.append(os.path.join(CACHE, na[0]))
     for c in cands:
         for sub in ("bin", ""):
             gcc = os.path.join(c, sub, "arm-none-eabi-gcc")
             if os.access(gcc, os.X_OK):
                 return os.path.dirname(gcc)
+    if fetch:
+        return os.path.join(fetch_toolchain(), "bin")
     gcc = shutil.which("arm-none-eabi-gcc")
     if gcc:
         return os.path.dirname(os.path.realpath(gcc))
     die("arm-none-eabi-gcc not found.\n"
+        "  tools/fw2emu hwcheck --fetch-toolchain   downloads the Arm GNU Toolchain 14.2.Rel1 WiliBSP uses\n"
         "  Debian/Ubuntu:  sudo apt install gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib\n"
-        "  Or install the Arm GNU Toolchain (WiliBSP uses 14.2.Rel1) and set PICO_TOOLCHAIN_PATH\n"
+        "  Or install the Arm GNU Toolchain yourself and set PICO_TOOLCHAIN_PATH\n"
         "  to its directory (the one containing bin/arm-none-eabi-gcc).")
 
 
@@ -164,6 +227,15 @@ def need_onewili():
 # --------------------------------------------------------------------- memory
 
 
+class Messages(list):
+    """[{"level": "error"|"warn"|"note", "text": ...}]"""
+
+    def append(self, level, text=None):
+        if text is None:
+            level, text = "note", level
+        super().append(dict(level=level, text=text))
+
+
 def region_of(addr):
     if RAM_BASE <= addr < RAM_BASE + RAM_SIZE:
         return "SRAM"
@@ -180,8 +252,30 @@ def region_of(addr):
     return "OTHER"
 
 
+def _lma(elf, sec):
+    """Load address of an allocated section (its address in the UF2), from the program headers."""
+    for p in elf.segments:
+        if p["type"] == elf.PT_LOAD and p["vaddr"] <= sec["addr"] < p["vaddr"] + max(p["memsz"], 1):
+            return p["paddr"] + sec["addr"] - p["vaddr"]
+    return sec["addr"]
+
+
+def _kind(sec):
+    if sec["flags"] & 0x1 or sec["name"].startswith((".data", ".tdata")):   # .data also holds .time_critical code
+        return "data"
+    if sec["flags"] & 0x4:                      # SHF_EXECINSTR
+        return "code"
+    return "rodata"
+
+
 def memory_report(elf):
-    """Sizes from the section and program headers of a linked app."""
+    """Sizes from the section and program headers of a linked app.
+
+    fw2_display_app() images load into SRAM (no_flash). fw2_psram_app() images
+    load into PSRAM and copy an SRAM bootstrap (.sram_bootstrap) and .data to
+    SRAM at start-up (WiliBSP bsp/app/psram_link). Both are described by where
+    each section is loaded (LMA) and where it runs (VMA).
+    """
     alloc = [s for s in elf.sections if s["flags"] & elf.SHF_ALLOC and s["size"]]
     payload = {}           # region -> (bytes, lowest, highest end) of loadable bytes (UF2 content)
     for p in elf.segments:
@@ -192,38 +286,51 @@ def memory_report(elf):
         payload[r] = (b + p["filesz"], min(lo, p["paddr"]), max(hi, p["paddr"] + p["filesz"]))
     sections = []
     for s in alloc:
-        sections.append(dict(name=s["name"], addr=s["addr"], size=s["size"],
-                             load=s["type"] != elf.SHT_NOBITS, region=region_of(s["addr"])))
+        load = s["type"] != elf.SHT_NOBITS
+        lma = _lma(elf, s) if load else s["addr"]
+        sections.append(dict(name=s["name"], addr=s["addr"], lma=lma, size=s["size"], load=load,
+                             kind=_kind(s), region=region_of(s["addr"]), load_region=region_of(lma)))
 
-    def region_end(r, base):
-        ends = [s["addr"] + s["size"] for s in sections if s["region"] == r]
-        return (max(ends) - base) if ends else 0
-
-    sram_payload = payload.get("SRAM", (0, RAM_BASE, RAM_BASE))
-    heap_start = elf.symbol("__end__")
-    heap_limit = elf.symbol("__HeapLimit") or RAM_BASE + RAM_SIZE
-    kinds = {}
+    image_region = "PSRAM" if "PSRAM" in payload and "SRAM" not in payload else "SRAM"
+    base, window = ((PSRAM_BASE, PSRAM_SIZE) if image_region == "PSRAM"
+                    else (RAM_BASE, INSTALL_SRAM_END - RAM_BASE))
+    b, lo, hi = payload.get(image_region, (0, base, base))
+    image_parts = {}
+    copied = {}            # loaded in the image, run from SRAM (copied at start-up)
     for s in sections:
-        if s["region"] != "SRAM":
-            continue
-        n = s["name"]
-        k = ("text" if n.startswith((".text", ".ARM", ".binary_info", ".boot", ".embedded", ".init", ".fini"))
-             else "rodata" if n.startswith(".rodata")
-             else "data" if s["load"]
-             else "heap" if n == ".heap"
-             else "bss")
-        kinds[k] = kinds.get(k, 0) + s["size"]
+        if s["load"] and s["load_region"] == image_region:
+            k = "bootstrap" if s["name"] == ".sram_bootstrap" else s["kind"]
+            if s["region"] == "SRAM" and image_region == "PSRAM":
+                copied[s["name"]] = s["size"]
+            image_parts[k] = image_parts.get(k, 0) + s["size"]
 
-    psram_noload = sum(s["size"] for s in sections if s["region"] == "PSRAM" and not s["load"])
-    psram_load = sum(s["size"] for s in sections if s["region"] == "PSRAM" and s["load"])
+    stack_top = elf.symbol("__StackTop") or SCRATCH_Y + SCRATCH_SIZE
+    # A stack top inside main SRAM (fw2_psram_app: 0x20070000, below the
+    # DISPLAY loader's reserved SRAM) also caps what the app may use there.
+    ram_limit = (stack_top - RAM_BASE) if RAM_BASE < stack_top <= RAM_BASE + RAM_SIZE else RAM_SIZE
+    sram = [s for s in sections if s["region"] == "SRAM"]
+    ram_parts = {}
+    for s in sram:
+        k = ("bootstrap" if s["name"] == ".sram_bootstrap" else "heap" if s["name"] == ".heap"
+             else s["kind"] if s["load"] else "bss")
+        ram_parts[k] = ram_parts.get(k, 0) + s["size"]
+    heap_start = elf.symbol("__end__")
+    # The SDK's _sbrk (pico_clib_interface) stops at __StackLimit ("historically
+    # the maximum heap pointer"), not at __StackTop.
+    heap_limit = elf.symbol("__StackLimit") or elf.symbol("__HeapLimit") or RAM_BASE + RAM_SIZE
+    heap_end = min(heap_limit, stack_top) if RAM_BASE < stack_top <= RAM_BASE + RAM_SIZE else heap_limit
+    psram_sec = [s for s in sections if s["region"] == "PSRAM"]
     return dict(
-        payload={r: dict(bytes=b, start=lo, end=hi) for r, (b, lo, hi) in payload.items()},
-        sram_image=dict(bytes=sram_payload[0], extent=sram_payload[2] - RAM_BASE if sram_payload[0] else 0,
-                        limit=INSTALL_SRAM_END - RAM_BASE, breakdown=kinds),
-        ram=dict(used=region_end("SRAM", RAM_BASE), limit=RAM_SIZE,
-                 heap_start=heap_start, heap_limit=heap_limit,
-                 heap_free=(heap_limit - heap_start) if heap_start else None),
-        psram=dict(used=region_end("PSRAM", PSRAM_BASE), noload=psram_noload, load=psram_load, limit=PSRAM_SIZE),
+        payload={r: dict(bytes=b_, start=lo_, end=hi_) for r, (b_, lo_, hi_) in payload.items()},
+        image=dict(region=image_region, bytes=b, extent=hi - base if b else 0, limit=window,
+                   breakdown=image_parts, copied_to_sram=copied),
+        ram=dict(used=max((s["addr"] + s["size"] - RAM_BASE for s in sram), default=0), limit=ram_limit,
+                 breakdown=ram_parts, heap_start=heap_start, heap_limit=heap_limit,
+                 heap_free=(heap_end - heap_start) if heap_start else None),
+        psram=dict(used=max((s["addr"] + s["size"] - PSRAM_BASE for s in psram_sec), default=0),
+                   noload=sum(s["size"] for s in psram_sec if not s["load"]),
+                   load=sum(s["size"] for s in psram_sec if s["load"]), limit=PSRAM_SIZE),
+        stack_top=stack_top,
         scratch_x_data=sum(s["size"] for s in sections if s["region"] == "SCRATCH_X" and not s["name"].startswith(".stack")),
         scratch_y_data=sum(s["size"] for s in sections if s["region"] == "SCRATCH_Y" and not s["name"].startswith(".stack")),
         sections=sections,
@@ -231,30 +338,56 @@ def memory_report(elf):
 
 
 def stack_budget(elf, mem, stack):
-    """Compare worst-case stack with the scratch banks. Returns (status, messages)."""
-    msgs, status = [], "ok"
-    top0 = elf.symbol("__StackTop") or SCRATCH_Y + SCRATCH_SIZE
+    """Compare the worst-case stack with the memory below the stack top. Returns (status, messages, budget).
+
+    The layout comes from the linked ELF: __StackTop is the initial MSP. The
+    Pico SDK puts it at the top of SCRATCH_Y (0x20082000); WiliBSP's
+    fw2_psram_app() link sets it to 0x20070000 in main SRAM.
+    """
+    msgs, status = Messages(), "ok"
+    top0 = mem["stack_top"]
     top1 = elf.symbol("__StackOneTop") or SCRATCH_X + SCRATCH_SIZE
-    y_free = top0 - (SCRATCH_Y + mem["scratch_y_data"])
     x_free = top1 - (SCRATCH_X + mem["scratch_x_data"])
     core1 = stack["core1_launched"]
     need = stack["combined"]
-    budget = dict(scratch_y=y_free, scratch_x=x_free, core0_limit=y_free if core1 else y_free + x_free)
-    if need > budget["core0_limit"]:
+    if SCRATCH_Y < top0 <= SCRATCH_Y + SCRATCH_SIZE:
+        y_free = top0 - (SCRATCH_Y + mem["scratch_y_data"])
+        budget = dict(region="SCRATCH_Y", top=top0, limit=y_free,
+                      hard_limit=y_free if core1 else y_free + x_free)
+        if need > budget["hard_limit"]:
+            status = "error"
+            if core1:
+                msgs.append("error", f"core 0 stack {need} B overflows SCRATCH_Y ({y_free} B) into core 1's stack")
+            else:
+                msgs.append("error", f"core 0 stack {need} B overflows both scratch banks ({y_free + x_free} B) "
+                            "into the top of RAM, where the heap ends; there is no stack guard")
+        elif need > y_free:
+            status = "warn"
+            msgs.append("warn", f"core 0 stack {need} B exceeds SCRATCH_Y ({y_free} B) and is using SCRATCH_X, "
+                        "core 1's stack region (fine only while core 1 is not launched)")
+    elif RAM_BASE < top0 <= RAM_BASE + RAM_SIZE:
+        floor = RAM_BASE + mem["ram"]["used"]          # end of .bss + .heap reserve
+        gap = top0 - floor
+        budget = dict(region="SRAM", top=top0, limit=gap, hard_limit=gap)
+        if need > gap:
+            status = "error"
+            msgs.append("error", f"core 0 stack {need} B does not fit between static RAM (ends 0x{floor:08x}) "
+                        f"and the stack top 0x{top0:08x} ({gap} B)")
+        hl = mem["ram"]["heap_limit"]
+        if stack.get("uses_malloc") and hl > top0:
+            if status == "ok":
+                status = "warn"
+            msgs.append("warn", f"malloc (the SDK's _sbrk) may grow up to __StackLimit 0x{hl:08x}, past the "
+                        f"stack top 0x{top0:08x}: a large heap runs into the stack, and beyond it into SRAM "
+                        "the DISPLAY loader reserves; nothing stops it")
+    else:
+        budget = dict(region=region_of(top0), top=top0, limit=0, hard_limit=0)
         status = "error"
-        if core1:
-            msgs.append(f"core 0 stack {need} B overflows SCRATCH_Y ({y_free} B) into core 1's stack")
-        else:
-            msgs.append(f"core 0 stack {need} B overflows both scratch banks ({y_free + x_free} B) "
-                        "into the top of RAM, where the heap ends; there is no stack guard")
-    elif need > y_free:
-        status = "warn"
-        msgs.append(f"core 0 stack {need} B exceeds SCRATCH_Y ({y_free} B) and is using SCRATCH_X, "
-                    "core 1's stack region (fine only while core 1 is not launched)")
+        msgs.append("error", f"initial stack pointer __StackTop 0x{top0:08x} is not in SRAM")
     for c in stack["core1"]:
         if c["bytes"] + stack["exception_frame"] > x_free:
             status = "error"
-            msgs.append(f"core 1 stack ({c['name']}) {c['bytes']} B + exception frame overflows SCRATCH_X ({x_free} B)")
+            msgs.append("error", f"core 1 stack ({c['name']}) {c['bytes']} B + exception frame overflows SCRATCH_X ({x_free} B)")
     return status, msgs, budget
 
 
@@ -262,7 +395,7 @@ def check_elf(elf_path, build_dir):
     elf = stackcheck.Elf(elf_path)
     mem = memory_report(elf)
     st = stackcheck.analyse(elf_path, build_dir)
-    msgs, status = [], "ok"
+    msgs, status = Messages(), "ok"
 
     def bump(s):
         nonlocal status
@@ -272,25 +405,27 @@ def check_elf(elf_path, build_dir):
 
     regions = set(mem["payload"])
     if "FLASH" in regions:
-        bump("error"); msgs.append("image has payload in QSPI flash; the app installer rejects it")
+        bump("error"); msgs.append("error", "image has payload in QSPI flash; the app installer rejects it")
     if "PSRAM" in regions and regions & {"SRAM", "SCRATCH_X", "SCRATCH_Y", "XIP_RAM"}:
-        bump("error"); msgs.append("image mixes SRAM and PSRAM payload; the app installer rejects it")
+        bump("error"); msgs.append("error", "image mixes SRAM and PSRAM payload; the app installer rejects it")
     for r in regions & {"SCRATCH_X", "SCRATCH_Y", "XIP_RAM", "OTHER"}:
-        bump("error"); msgs.append(f"image has payload in {r} ({mem['payload'][r]['bytes']} B), outside the installer's "
-                                   "SRAM window 0x20000000..0x20070000")
-    img = mem["sram_image"]
+        bump("error"); msgs.append("error", f"image has payload in {r} ({mem['payload'][r]['bytes']} B), outside the "
+                                   "installer's windows")
+    img = mem["image"]
     if img["extent"] > img["limit"]:
-        bump("error"); msgs.append(f"SRAM image ends at +{img['extent'] / KB:.1f} KB, beyond the installer's "
-                                   f"{img['limit'] // KB} KB window (0x20000000..0x20070000)")
+        where = ("the installer's 448 KB SRAM window (0x20000000..0x20070000)" if img["region"] == "SRAM"
+                 else "the 8 MB PSRAM window")
+        bump("error"); msgs.append("error", f"{img['region']} image extends {img['extent'] / KB:.1f} KB, beyond {where}")
     if mem["ram"]["used"] > mem["ram"]["limit"]:
-        bump("error"); msgs.append("static RAM use exceeds 512 KB")
+        bump("error"); msgs.append("error", f"static SRAM use {mem['ram']['used'] / KB:.1f} KB exceeds "
+                                   f"{mem['ram']['limit'] / KB:.0f} KB")
     if mem["psram"]["used"] > mem["psram"]["limit"]:
-        bump("error"); msgs.append("PSRAM use exceeds 8 MB")
+        bump("error"); msgs.append("error", "PSRAM use exceeds 8 MB")
     st["core1_launched"] = bool(st["core1"]) or st.get("core1_launch_sites", 0) > 0
     s, m, budget = stack_budget(elf, mem, st)
-    bump(s); msgs += m
+    bump(s); msgs.extend(m)
     if st["irq_priorities_changed"]:
-        msgs.append("the app changes IRQ priorities (" + ", ".join(st["irq_priorities_changed"]) +
+        msgs.append("note", "the app changes IRQ priorities (" + ", ".join(st["irq_priorities_changed"]) +
                     "): nested interrupts can stack deeper than the figure above")
     return dict(elf=elf_path, status=status, messages=msgs, memory=mem, stack=st, stack_budget=budget)
 
@@ -404,8 +539,17 @@ def cmd_hwcheck(a):
             die(f"two apps share the folder name '{base}': {names[base]} and {d}")
         names[base] = d
         dirs.append((d, targets))
+    if a.exclude:
+        drop = set(a.exclude)
+        dirs = [(d, t) for d, t in dirs if os.path.basename(d) not in drop and not drop & set(t)]
+        if not dirs:
+            die("--exclude left no apps to check")
     need_onewili()
-    bindir = find_toolchain(a.toolchain)
+    bindir = find_toolchain(a.toolchain, fetch=a.fetch_toolchain)
+    gv = gcc_version(bindir)
+    if not gv.startswith("14.2") and not a.json:
+        print(f"fw2emu: note: arm-none-eabi-gcc {gv}; WiliBSP builds with Arm GNU Toolchain 14.2.Rel1, so sizes "
+              "can differ slightly (--fetch-toolchain downloads it)", file=sys.stderr)
     sdk = find_sdk(a.sdk)
     build = os.path.abspath(a.build_dir)
     os.makedirs(build, exist_ok=True)
@@ -443,24 +587,26 @@ def cmd_hwcheck(a):
     results = []
     for d, targets in dirs:
         base = os.path.basename(d)
-        mine = [ln for cmd, lines in failed.items() if f"apps/{base}/" in cmd for ln in lines]
-        shared = [ln for cmd, lines in failed.items() if "apps/" not in cmd for ln in lines]
+        mine = [ln for out, lines in failed.items() if f"apps/{base}/" in out for ln in lines]
+        shared = [ln for out, lines in failed.items() if "apps/" not in out for ln in lines]
         for t in targets:
             elf = os.path.join(build, "apps", base, t + ".elf")
             r = dict(app=t, dir=d)
-            why = mine or shared
+            why = mine if mine else shared
             if why or not os.path.exists(elf):
-                key = [ln for ln in why if re.search(r"error:|Error:|overflow", ln)
-                       and not ln.lstrip().startswith("raise ")] or why
-                msgs = ["build failed (log: " + log_path + ")"] + [ln.strip() for ln in key[:8]]
+                errs = meaningful_errors(why)
                 if not os.path.exists(elf):
-                    r.update(status="error", messages=msgs)
+                    msgs = Messages()
+                    msgs.append("error", f"build failed; full log: {log_path}")
+                    r.update(status="error", messages=msgs, build_errors=errs)
                     results.append(r)
                     continue
-                # Linked, but a post-link check (WiliBSP's check_app_uf2.py) failed: still report sizes.
+                # Linked, but a post-link check (e.g. WiliBSP's check_app_uf2.py or an
+                # app's own verify script) failed: report the sizes as well.
                 r.update(check_elf(elf, build))
                 r["status"] = "error"
-                r["messages"] = msgs + r["messages"]
+                r["build_errors"] = errs
+                r["messages"].insert(0, dict(level="error", text=f"a post-link check failed; full log: {log_path}"))
             else:
                 r.update(check_elf(elf, build))
             results.append(r)
@@ -479,67 +625,116 @@ def cmd_hwcheck(a):
 
 
 def ninja_failures(log):
-    """{FAILED line: [output lines]} from a ninja log."""
-    out, cur = {}, None
+    """{FAILED line: [output lines]} from a ninja log, without the (long) command line."""
+    out, cur, skip = {}, None, False
     for ln in log.splitlines():
         if ln.startswith("FAILED: "):
-            cur = ln
+            cur, skip = ln, True
             out[cur] = []
         elif re.match(r"^\[\d+/\d+\] ", ln) or ln.startswith("ninja: "):
             cur = None
         elif cur:
+            if skip:            # ninja prints the command right after FAILED:
+                skip = False
+                continue
             out[cur].append(ln)
     return out
+
+
+# Normal output of WiliBSP's post-link steps, not errors.
+_NORMAL = re.compile(r"^(app UF2 target:|FW2 app:|Generating |layout check: PSRAM app \+)")
+_ERROR = re.compile(r"\berror\b|Error:|overflow|undefined reference|multiple definition|cannot find|"
+                    r"No such file|layout check:|not in |outside|\bfailed\b|Exception|SystemExit", re.I)
+
+
+def meaningful_errors(lines, limit=10):
+    """The compiler / linker / script error lines of a failed step."""
+    keep = []
+    for ln in lines:
+        t = ln.strip()
+        if not t or _NORMAL.match(t) or t.startswith(("Traceback", "File \"", "raise ", "^")):
+            continue
+        if _ERROR.search(t) and t not in keep:
+            keep.append(t if len(t) <= 300 else t[:297] + "...")
+    if not keep:
+        keep = [ln.strip()[:300] for ln in lines if ln.strip() and not _NORMAL.match(ln.strip())][-5:]
+    return keep[:limit]
 
 
 def _pct(n, d):
     return f"{100.0 * n / d:3.0f}%" if d else ""
 
 
+def _kb(n):
+    return f"{n / KB:.1f} KB"
+
+
 def print_table(meta, results, verbose):
     print(f"\nFREE-WILi 2 hardware check: Pico SDK {meta['pico_sdk']}, arm-none-eabi-gcc {meta['gcc']}"
           f" (WiliBSP's pinned toolchain is {meta['wilibsp_pinned_toolchain']})\n")
-    hdr = f"{'app':<16} {'SRAM image':>20} {'RAM (static)':>20} {'PSRAM':>20} {'stack':>13} {'unknowns':>9}  status"
+    hdr = (f"{'app':<17} {'image (loaded)':>24} {'SRAM (static)':>20} {'PSRAM (all)':>20} "
+           f"{'stack':>14} {'unknowns':>9}  status")
     print(hdr)
     print("-" * len(hdr))
     for r in results:
         if "memory" not in r:
-            print(f"{r['app']:<16} {'':>20} {'':>20} {'':>20} {'':>13} {'':>9}  BUILD FAILED")
+            print(f"{r['app']:<17} {'':>24} {'':>20} {'':>20} {'':>14} {'':>9}  BUILD FAILED")
             continue
         m, s = r["memory"], r["stack"]
-        img = m["sram_image"]
-        if "PSRAM" in m["payload"] and not img["bytes"]:
-            img_s = f"PSRAM {m['payload']['PSRAM']['bytes'] / KB:.1f} KB"
-        else:
-            img_s = f"{img['extent'] / KB:6.1f}/{img['limit'] // KB} KB {_pct(img['extent'], img['limit'])}"
+        img = m["image"]
+        img_s = (f"{img['region']} {img['extent'] / KB:6.1f}/{img['limit'] // KB} KB "
+                 f"{_pct(img['extent'], img['limit'])}")
         ram_s = f"{m['ram']['used'] / KB:6.1f}/{m['ram']['limit'] // KB} KB {_pct(m['ram']['used'], m['ram']['limit'])}"
         ps = m["psram"]["used"]
         ps_s = f"{ps / KB:6.1f}/{m['psram']['limit'] // KB} KB {_pct(ps, m['psram']['limit'])}" if ps else "-"
-        lim = r["stack_budget"]["scratch_y"]
-        st_s = f"{s['combined']:5d}/{lim} B"
+        b = r["stack_budget"]
+        lim = b["limit"]
+        st_s = f"{s['combined']}/{lim // KB} KB" if lim >= 16 * KB else f"{s['combined']}/{lim} B"
         unk = stackcheck.count_unknown(s["main"]["unknown"])
         for h in s["irq"]:
             unk += stackcheck.count_unknown(h["unknown"])
-        print(f"{r['app']:<16} {img_s:>20} {ram_s:>20} {ps_s:>20} {st_s:>13} {unk:>9}  {r['status'].upper()}")
+        print(f"{r['app']:<17} {img_s:>24} {ram_s:>20} {ps_s:>20} {st_s:>14} {unk:>9}  {r['status'].upper()}")
     print()
     for r in results:
         print(f"{r['app']}  ({r['dir']})")
         if "memory" not in r:
-            for m in r.get("messages", []):
-                print(f"  {m}")
+            _print_messages(r)
             print()
             continue
         m, s = r["memory"], r["stack"]
-        bd = m["sram_image"]["breakdown"]
-        print(f"  SRAM image {m['sram_image']['bytes']} B (text {bd.get('text', 0)}, rodata {bd.get('rodata', 0)}, "
-              f"data {bd.get('data', 0)}); + bss {bd.get('bss', 0)}, heap reserve {bd.get('heap', 0)}"
-              + (f"; malloc can use {m['ram']['heap_free'] / KB:.1f} KB" if m["ram"]["heap_free"] else ""))
+        img, ram = m["image"], m["ram"]
+        bd = img["breakdown"]
+        if img["region"] == "PSRAM":
+            parts = ", ".join(f"{k} {v}" for k, v in (("code", bd.get("code", 0)), ("rodata", bd.get("rodata", 0)),
+                                                      ("SRAM bootstrap", bd.get("bootstrap", 0)),
+                                                      ("data", bd.get("data", 0))) if v)
+            print(f"  PSRAM image {img['bytes']} B ({parts}) in the 8 MB window (fw2_psram_app)")
+            if img["copied_to_sram"]:
+                print("  copied to SRAM at start-up: " +
+                      ", ".join(f"{n} {v} B" for n, v in img["copied_to_sram"].items()))
+        else:
+            print(f"  SRAM image {img['bytes']} B (code {bd.get('code', 0)}, rodata {bd.get('rodata', 0)}, "
+                  f"data {bd.get('data', 0)})")
+        rb = ram["breakdown"]
+        parts = ", ".join(f"{k} {v}" for k, v in (("bootstrap", rb.get("bootstrap", 0)), ("code", rb.get("code", 0)),
+                                                  ("rodata", rb.get("rodata", 0)), ("data", rb.get("data", 0)),
+                                                  ("bss", rb.get("bss", 0)), ("heap reserve", rb.get("heap", 0))) if v)
+        print(f"  SRAM in use {ram['used']} B ({parts})"
+              + (f"; malloc can use {_kb(ram['heap_free'])}" if ram["heap_free"] and s.get("uses_malloc") else ""))
         if m["psram"]["used"]:
-            print(f"  PSRAM {m['psram']['noload']} B NOLOAD" + (f", {m['psram']['load']} B loaded" if m["psram"]["load"] else ""))
+            print(f"  PSRAM {m['psram']['load']} B loaded + {m['psram']['noload']} B NOLOAD")
+        b = r["stack_budget"]
+        if b["region"] == "SRAM":
+            where = (f"stack grows down from 0x{b['top']:08x} (WiliBSP's PSRAM link) into the "
+                     f"{_kb(b['limit'])} above static SRAM" + (", shared with malloc" if s.get("uses_malloc") else ""))
+        else:
+            where = f"stack grows down from 0x{b['top']:08x} through the {b['limit']} B of SCRATCH_Y"
         wi = next((h for h in s["irq"] if h["name"] == s["worst_irq"]), None)
-        print(f"  stack {s['combined']} B = main {s['main']['bytes']} B + exception entry {s['exception_frame']} B"
+        print(f"  stack {s['combined']} B = {s['main'].get('root', 'main')} {s['main']['bytes']} B"
+              f" + exception entry {s['exception_frame']} B"
               + (f" + IRQ {wi['bytes']} B ({wi['name']}, {wi['kind']})" if wi else " (no IRQ handlers found)"))
-        print(f"    main: {stackcheck.format_path(s['main']['path'], 8 if not verbose else 100)}")
+        print(f"    {where}")
+        print(f"    thread: {stackcheck.format_path(s['main']['path'], 8 if not verbose else 100)}")
         if wi and verbose:
             print(f"    IRQ:  {stackcheck.format_path(wi['path'], 100)}")
         if verbose:
@@ -561,9 +756,17 @@ def print_table(meta, results, verbose):
                 print("    lower bound: " + ", ".join(parts) + "  (-v lists them)")
         for c in s["core1"]:
             print(f"  core 1: {c['bytes']} B  {stackcheck.format_path(c['path'], 8)}")
-        for msg in r["messages"]:
-            print(f"  {r['status'].upper() if r['status'] != 'ok' else 'NOTE'}: {msg}")
+        _print_messages(r)
         print()
+
+
+def _print_messages(r):
+    errs = r.get("build_errors", [])
+    for i, msg in enumerate(r.get("messages", [])):
+        print(f"  {msg['level'].upper()}: {msg['text']}")
+        if i == 0 and errs:              # the build-failure message comes first
+            for ln in errs:
+                print(f"      {ln}")
 
 
 # --------------------------------------------------------------------- main
@@ -608,7 +811,13 @@ def main():
     h.add_argument("--sdk", help="Pico SDK path (default: $PICO_SDK_PATH, ~/.pico-sdk/sdk/2.3.0, "
                                  "else fetched into ~/.cache/fw2emu)")
     h.add_argument("--toolchain", help="Arm GNU toolchain directory (default: $PICO_TOOLCHAIN_PATH, "
-                                       "~/.pico-sdk/toolchain/14_2_Rel1, else PATH)")
+                                       "~/.pico-sdk/toolchain/14_2_Rel1, ~/.cache/fw2emu/arm-gnu-toolchain-"
+                                       "14.2.rel1-*, else PATH)")
+    h.add_argument("--fetch-toolchain", action="store_true",
+                   help="if no Arm GNU Toolchain 14.2.Rel1 is found, download it into ~/.cache/fw2emu "
+                        "(Linux x86_64/aarch64)")
+    h.add_argument("--exclude", action="append", metavar="APP", default=[],
+                   help="skip an app (folder or target name); repeatable")
     h.add_argument("--json", action="store_true", help="print JSON instead of the table")
     h.add_argument("-o", "--output", metavar="FILE", help="also write the JSON report to FILE")
     h.add_argument("-v", "--verbose", action="store_true", help="list IRQ handlers and every unknown")

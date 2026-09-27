@@ -112,17 +112,31 @@ tools/fw2emu hwcheck apps/my_app           # one app (any folder with a fw2_disp
 tools/fw2emu hwcheck -v apps/my_app        # also list IRQ handlers and every unknown
 tools/fw2emu hwcheck --json > hwcheck.json # machine-readable report
 tools/fw2emu hwcheck -o hwcheck.json       # table on stdout, JSON to a file
+tools/fw2emu hwcheck --fetch-toolchain     # use (and if needed download) Arm GNU Toolchain 14.2.Rel1
 ```
 
-Options: `--build-dir DIR` (default `build-hw/`), `--sdk PATH`, and
-`--toolchain DIR`.
+Options: `--build-dir DIR` (default `build-hw/`), `--sdk PATH`,
+`--toolchain DIR`, `--fetch-toolchain`, and `--exclude APP` (repeatable).
 
 **Requirements:**
 
-- Arm GCC: `sudo apt install gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib`,
-  or the Arm GNU Toolchain via `PICO_TOOLCHAIN_PATH` or
-  `~/.pico-sdk/toolchain/14_2_Rel1`. WiliBSP builds with 14.2.Rel1. The
-  distribution's GCC 13 gives numbers that are close but not identical.
+- Arm GCC. WiliBSP builds with the Arm GNU Toolchain 14.2.Rel1, and so does
+  CI. The tool looks for a toolchain in this order:
+  1. `--toolchain`;
+  2. `PICO_TOOLCHAIN_PATH`;
+  3. `~/.pico-sdk/toolchain/14_2_Rel1`;
+  4. `~/.cache/fw2emu/arm-gnu-toolchain-14.2.rel1-<arch>-arm-none-eabi`;
+  5. `arm-none-eabi-gcc` on `PATH`.
+
+  `--fetch-toolchain` downloads 14.2.Rel1 from developer.arm.com into that
+  cache folder if none of the first four exist (Linux x86_64 and aarch64; the
+  SHA-256 is checked).
+
+  As a local fallback, the distribution's GCC also works:
+  `sudo apt install gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib`.
+  Ubuntu 24.04 ships GCC 13.2. Its sizes and frames are close to 14.2's but
+  not identical, and `hwcheck` prints a note when it uses anything other
+  than 14.2.
 - The Pico SDK 2.3.0. The tool looks for it in this order: `PICO_SDK_PATH`,
   then `~/.pico-sdk/sdk/2.3.0` (where WiliBSP's `fw` tool expects it). If it
   finds neither, it clones the SDK into `~/.cache/fw2emu/pico-sdk-2.3.0` on
@@ -130,40 +144,69 @@ Options: `--build-dir DIR` (default `build-hw/`), `--sdk PATH`, and
 - WiliBSP's nested `onewili` submodule:
   `git -C third_party/wilibsp submodule update --init --depth 1 libs/onewili`.
 
-The build runs the same post-link checks as WiliBSP (`make_app_uf2.py` and
-`check_app_uf2.py`), so it also produces the real `.uf2` in
-`build-hw/apps/<app>/`.
+The build runs the same post-link checks as WiliBSP (`make_app_uf2.py`,
+`check_app_uf2.py`, and an app's own `POST_BUILD` checks such as
+`hello_psram_exec`'s `verify_layout.py`), so it also produces the real
+`.uf2` in `build-hw/apps/<app>/`. When a build step or check fails,
+`hwcheck` prints only its error lines (compiler, linker or script messages)
+under the app, plus the path of the full log. If the ELF was still linked,
+the sizes are reported as well.
 
 ### What it reports
 
 | Column | Meaning | Limit |
 |---|---|---|
-| SRAM image | loadable bytes (`.text`, `.rodata`, `.data`, ...), measured as how far the image extends from `0x20000000` | 448 KB: the app installer only accepts SRAM payload inside `0x20000000..0x20070000` |
-| RAM (static) | image plus `.bss` and the `.heap` reserve (the highest SRAM address the linker uses) | 512 KB. The rest, up to `0x20080000`, is what `malloc` can use |
-| PSRAM | `__psram` / `__uninitialized_psram` data (NOLOAD) | 8 MB (`0x11000000..0x11800000`) |
-| stack | worst case for core 0: main + exception entry + worst IRQ handler | 4 KB (SCRATCH_Y) |
+| image (loaded) | the UF2 payload, measured as how far it extends from the start of its window. `SRAM` for `fw2_display_app()`, `PSRAM` for `fw2_psram_app()` | SRAM: 448 KB (the installer only accepts SRAM payload inside `0x20000000..0x20070000`). PSRAM: 8 MB |
+| SRAM (static) | everything placed in SRAM at run time: code and data copied there, `.bss`, and the `.heap` reserve (the highest SRAM address the linker uses) | 512 KB for SRAM apps (malloc can use the rest up to `0x20080000`). For PSRAM apps, up to the stack top (448 KB) |
+| PSRAM (all) | loaded PSRAM image plus `__psram` / `__uninitialized_psram` data (NOLOAD) | 8 MB (`0x11000000..0x11800000`) |
+| stack | worst case for core 0 / available below the stack top | 4 KB (SCRATCH_Y) for SRAM apps; the gap above static SRAM for PSRAM apps |
 | unknowns | places where the stack figure is only a lower bound (see below) | |
 
 The command exits with status 1 if any of the following is true:
 
-- an image goes past 448 KB;
-- static RAM goes past 512 KB;
+- an SRAM image goes past 448 KB, or a PSRAM image past 8 MB;
+- static SRAM goes past its limit;
 - PSRAM goes past 8 MB;
 - an image mixes SRAM and PSRAM payload, or has payload in flash or scratch
   RAM (the installer rejects both);
-- the stack overruns the scratch banks;
-- a build fails.
+- the stack does not fit (see below);
+- a build step or post-link check fails.
 
-**Stack layout on the RP2350.** Core 0's stack starts at the top of
-SCRATCH_Y (`0x20082000`) and grows down. There is no stack guard by default.
-Past the 4 KB of SCRATCH_Y it runs into SCRATCH_X, where core 1's stack
-lives. Past SCRATCH_X it runs into the top of RAM, where the heap ends.
-`hwcheck` handles this as follows:
+`--exclude APP` skips an app, by folder or target name.
 
-- up to 4 KB: OK;
-- more than 4 KB: a warning, or an error if the app calls
-  `multicore_launch_core1()`;
-- more than 8 KB: an error.
+**PSRAM apps (`fw2_psram_app()`).** WiliBSP links these with its own
+scripts (`bsp/app/psram_link/`):
+
+- The vector table, the app's code and read-only data load into and run
+  from PSRAM.
+- An SRAM bootstrap (`.sram_bootstrap`: the BSP and the SDK code that
+  touches clocks and QMI) and `.data` load into PSRAM and are copied to SRAM
+  by `psram_startup.S` / `psram_bootstrap.c` before `main()`.
+
+`hwcheck` reports the PSRAM image, what is copied to SRAM, and the SRAM in
+use at run time (bootstrap + `.data` + `.bss` + heap reserve). The stack
+figure starts at `fw2_psram_bootstrap()`, which calls `main()` on the same
+stack.
+
+**Stack layout on the RP2350.** The limits come from the linked ELF's
+`__StackTop` (the initial stack pointer) and the scratch sections. There is
+no stack guard by default.
+
+- **SRAM apps**: core 0's stack starts at the top of SCRATCH_Y
+  (`0x20082000`) and grows down. Past the 4 KB of SCRATCH_Y it runs into
+  SCRATCH_X, where core 1's stack lives. Past SCRATCH_X it runs into the top
+  of RAM, where the heap ends. `hwcheck` handles this as follows:
+  - up to 4 KB: OK;
+  - more than 4 KB: a warning, or an error if the app calls
+    `multicore_launch_core1()`;
+  - more than 8 KB: an error.
+- **PSRAM apps**: WiliBSP sets `__StackTop` to `0x20070000`, below the SRAM
+  the DISPLAY loader reserves. The stack grows down towards the end of
+  static SRAM, and it is an error if it does not fit in that gap. The heap
+  grows up into the same gap. If the app uses `malloc`, `hwcheck` warns:
+  the SDK's `_sbrk` only stops at `__StackLimit` (`0x20080000`), which lies
+  above the stack top, so nothing stops the heap from running into the
+  stack.
 
 A core 1 entry point is analysed against SCRATCH_X.
 
@@ -176,7 +219,9 @@ disassembly: calls GCC added late (libgcc helpers), and the frames and calls
 of assembly and prebuilt newlib functions. Those appear as "estimated from
 disassembly".
 
-- **main**: the deepest call chain from `main()`.
+- **main**: the deepest call chain from `main()` (from
+  `fw2_psram_bootstrap()` for PSRAM apps). Linker veneers, the long-branch
+  stubs between SRAM and PSRAM code, are followed.
 - **IRQ handlers** come from three sources:
   - functions passed to `irq_set_exclusive_handler()` or
     `irq_add_shared_handler()`;

@@ -373,6 +373,13 @@ class Disasm:
                 indirect += 1
             elif base == "mov" and ops.startswith("pc,"):
                 indirect += 1
+            elif base == "ldr" and ops.startswith("pc, [pc"):
+                # Linker long-branch veneer (SRAM <-> PSRAM): jumps to a literal address.
+                far = self.literals(start)
+                if far:
+                    callees |= far
+                else:
+                    indirect += 1
         return frame, dynamic, callees, indirect
 
     def literals(self, start):
@@ -416,6 +423,8 @@ CALLBACK_REGISTER = {
 }
 CORE1_LAUNCH = {"multicore_launch_core1", "multicore_launch_core1_with_stack", "multicore_launch_core1_raw"}
 PRIORITY_CALLS = {"irq_set_priority", "exception_set_priority"}
+THREAD_ROOTS = ("fw2_psram_bootstrap", "main")
+HEAP_SYMBOLS = ("_sbrk", "_sbrk_r", "__wrap_malloc", "malloc")
 SHARED_CHAIN_BYTES = 8     # irq_handler_chain.S: push {r0, lr}
 
 
@@ -511,7 +520,8 @@ class Graph:
         if key in self.funcs:
             return key
         frame, dynamic, callees, indirect = self.dis.analyse(start)
-        f = Func(key, name, frame, "dynamic" if dynamic else "estimated", "disasm")
+        qual = "dynamic" if dynamic else "veneer" if name.endswith("_veneer") else "estimated"
+        f = Func(key, name, frame, qual, "disasm")
         self.funcs[key] = f
         self._addr_key[start] = key
         for c in callees:
@@ -672,10 +682,12 @@ def analyse(elf_path, build_dir=None, objdump=None):
     fp = g.dis.uses_fp
     exc_frame = (104 if fp else 32) + 4    # + up to 4 bytes of 8-byte alignment padding
 
-    main_addr = g.dis.by_name.get("main")
-    if main_addr is None:
+    if g.dis.by_name.get("main") is None:
         raise SystemExit(f"{elf_path}: no main()")
-    main_key = g.key_for_addr(main_addr)
+    # Thread-mode root: main(), or for fw2_psram_app() images WiliBSP's SRAM
+    # bootstrap, which runs on the same stack and calls main() itself.
+    thread_root = next(n for n in THREAD_ROOTS if n in g.dis.by_name)
+    main_key = g.key_for_addr(g.dis.by_name[thread_root])
 
     core1 = []
     core1_regs = g._registrations(CORE1_LAUNCH)
@@ -725,7 +737,8 @@ def analyse(elf_path, build_dir=None, objdump=None):
         elf=elf_path,
         fpu=fp,
         exception_frame=exc_frame,
-        main=dict(bytes=main_d, path=main_path, unknown=main_unknown),
+        main=dict(bytes=main_d, path=main_path, unknown=main_unknown, root=thread_root),
+        uses_malloc=any(n in g.dis.by_name for n in HEAP_SYMBOLS),
         irq=handlers,
         worst_irq=worst_irq["name"] if worst_irq else None,
         worst_irq_bytes=worst_irq["bytes"] if worst_irq else 0,
