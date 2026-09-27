@@ -49,6 +49,20 @@ docs/               this site
 - **Keep the tests green.** `tests/smoke.sh` must pass natively; CI also
   runs the sanitizer, 32-bit, hwcheck and web builds.
 
+## Keeping up with WiliBSP
+
+WiliBSP is pinned as a submodule (and, for Docker builds, as `WILIBSP_REF` in
+the `Dockerfile`). Every Monday the **WiliBSP update** workflow checks for new
+WiliBSP commits. If there are any, it moves both pins, runs every app's test
+and the real-hardware check against the new WiliBSP, and opens (or updates) a
+pull request titled *WiliBSP: update to …* with the results, the upstream
+commits and the changed files. Merge it when it passes; when it fails, the
+PR shows which apps broke. It can also be started by hand from the Actions
+tab.
+
+It needs one repository setting: **Settings → Actions → General → Workflow
+permissions → Allow GitHub Actions to create and approve pull requests**.
+
 ## Adding a device model
 
 1. Read the WiliBSP driver and the part's datasheet, and note which bus,

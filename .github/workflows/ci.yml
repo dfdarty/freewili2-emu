@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:            # the WiliBSP update workflow starts CI on its branch
 
 permissions:
   contents: read

@@ -1,0 +1,170 @@
+name: WiliBSP update
+
+# Once a week (and on demand): if WiliBSP has new commits, move the submodule
+# and the Dockerfile's pin to them, run every app's test and the real-hardware
+# check against the new WiliBSP, and open (or update) a pull request with the
+# results. Nothing in third_party/wilibsp is edited: only the pinned commit
+# moves.
+#
+# Needs Settings -> Actions -> General -> Workflow permissions ->
+# "Allow GitHub Actions to create and approve pull requests".
+on:
+  schedule:
+    - cron: "17 9 * * 1"        # Mondays 09:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write                # start CI on the update branch
+
+concurrency:
+  group: wilibsp-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    env:
+      UPSTREAM: https://github.com/freewili/wilibsp
+      BRANCH: wilibsp-update
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Look for new WiliBSP commits
+        id: check
+        run: |
+          old=$(git ls-tree HEAD third_party/wilibsp | awk '{print $3}')
+          new=$(git ls-remote "$UPSTREAM" refs/heads/master | cut -f1)
+          echo "old=$old" >> "$GITHUB_OUTPUT"
+          echo "new=$new" >> "$GITHUB_OUTPUT"
+          if [ -z "$new" ] || [ "$old" = "$new" ]; then
+            echo "WiliBSP is up to date (${old:0:7})"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "WiliBSP moved: ${old:0:7} -> ${new:0:7}"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Move the submodule and the Dockerfile pin
+        if: steps.check.outputs.changed == 'true'
+        env:
+          OLD: ${{ steps.check.outputs.old }}
+          NEW: ${{ steps.check.outputs.new }}
+        run: |
+          git -C third_party/wilibsp fetch -q origin master
+          git -C third_party/wilibsp checkout -q "$NEW"
+          git submodule update -q --init --recursive
+          sed -i "s/^ARG WILIBSP_REF=.*/ARG WILIBSP_REF=$NEW/" Dockerfile
+          {
+            echo "### WiliBSP ${OLD:0:7} → ${NEW:0:7}"
+            echo
+            echo '```'
+            git -C third_party/wilibsp log --no-merges --format='%h %s' "$OLD..$NEW" | head -60
+            echo '```'
+            echo
+            echo 'Changed files:'
+            echo
+            echo '```'
+            git -C third_party/wilibsp diff --stat "$OLD" "$NEW" | tail -25
+            echo '```'
+          } > "$RUNNER_TEMP/changes.md"
+
+      - name: Install dependencies
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build libsdl2-dev zlib1g-dev python3
+
+      - name: Run every app's test against the new WiliBSP
+        id: smoke
+        if: steps.check.outputs.changed == 'true'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          tests/smoke.sh 2>&1 | tee "$RUNNER_TEMP/smoke.txt"
+
+      - name: Cache toolchain, Pico SDK and picotool
+        if: steps.check.outputs.changed == 'true'
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/fw2emu
+          key: fw2emu-arm-14.2.rel1-pico-sdk-2.3.0-${{ runner.os }}-${{ hashFiles('tools/fw2emu') }}
+          restore-keys: fw2emu-arm-14.2.rel1-pico-sdk-2.3.0-${{ runner.os }}-
+
+      - name: Real-hardware check against the new WiliBSP
+        id: hw
+        if: steps.check.outputs.changed == 'true'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          tools/fw2emu hwcheck --fetch-toolchain 2>&1 | tee "$RUNNER_TEMP/hwcheck.txt"
+
+      - name: Keep the logs
+        if: steps.check.outputs.changed == 'true' && always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: wilibsp-update
+          path: |
+            out/*.log
+            out/*.png
+            ${{ runner.temp }}/smoke.txt
+            ${{ runner.temp }}/hwcheck.txt
+          if-no-files-found: ignore
+
+      - name: Open or update the pull request
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEW: ${{ steps.check.outputs.new }}
+          SMOKE: ${{ steps.smoke.outcome }}
+          HW: ${{ steps.hw.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          verdict() { [ "$1" = success ] && echo "✅ pass" || echo "❌ FAIL"; }
+          {
+            echo "Weekly WiliBSP update, opened by the [WiliBSP update workflow]($RUN_URL)."
+            echo
+            echo "| Check | Result |"
+            echo "|---|---|"
+            echo "| every app's test (\`tests/smoke.sh\`, native) | $(verdict "$SMOKE") |"
+            echo "| real-hardware build (\`fw2emu hwcheck\`) | $(verdict "$HW") |"
+            echo
+            if [ "$SMOKE" != success ]; then
+              echo '<details><summary>Failing tests</summary>'
+              echo; echo '```'
+              grep -E "^(FAIL|  )" "$RUNNER_TEMP/smoke.txt" | head -40
+              echo '```'; echo '</details>'; echo
+            fi
+            echo '<details><summary>Hardware check</summary>'
+            echo; echo '```'
+            sed -n '/^FREE-WILi 2 hardware check/,$p' "$RUNNER_TEMP/hwcheck.txt" | grep -v '^::' | head -40
+            echo '```'; echo '</details>'; echo
+            # A known upstream issue that stopped happening: update KNOWN_UPSTREAM in tools/fw2emu.
+            grep '^::warning' "$RUNNER_TEMP/hwcheck.txt" | sed 's/^::warning[^:]*::/- ⚠️ /' || true
+            echo
+            cat "$RUNNER_TEMP/changes.md"
+            echo
+            echo "Logs and screenshots are in the run's **wilibsp-update** artifact. CI is started on this branch too; its results appear on the commit."
+          } > "$RUNNER_TEMP/body.md"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -B "$BRANCH"
+          git add third_party/wilibsp Dockerfile
+          git commit -q -m "WiliBSP: update to ${NEW:0:7}"
+          git push -q -f origin "$BRANCH"
+
+          title="WiliBSP: update to ${NEW:0:7}"
+          [ "$SMOKE" = success ] && [ "$HW" = success ] || title="$title (checks failing)"
+          if [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            gh pr edit "$BRANCH" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh pr create --head "$BRANCH" --base "${{ github.event.repository.default_branch }}" \
+              --title "$title" --body-file "$RUNNER_TEMP/body.md"
+          fi
+          # Pull requests opened with the workflow token don't start other
+          # workflows by themselves; a dispatch does.
+          gh workflow run ci.yml --ref "$BRANCH"
