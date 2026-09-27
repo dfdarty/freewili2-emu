@@ -391,10 +391,11 @@ def stack_budget(elf, mem, stack):
     return status, msgs, budget
 
 
-def check_elf(elf_path, build_dir):
+def check_elf(elf_path, build_dir, bindir=None):
     elf = stackcheck.Elf(elf_path)
     mem = memory_report(elf)
-    st = stackcheck.analyse(elf_path, build_dir)
+    objdump = os.path.join(bindir, "arm-none-eabi-objdump") if bindir else None
+    st = stackcheck.analyse(elf_path, build_dir, objdump)
     msgs, status = Messages(), "ok"
 
     def bump(s):
@@ -603,12 +604,12 @@ def cmd_hwcheck(a):
                     continue
                 # Linked, but a post-link check (e.g. WiliBSP's check_app_uf2.py or an
                 # app's own verify script) failed: report the sizes as well.
-                r.update(check_elf(elf, build))
+                r.update(check_elf(elf, build, bindir))
                 r["status"] = "error"
                 r["build_errors"] = errs
                 r["messages"].insert(0, dict(level="error", text=f"a post-link check failed; full log: {log_path}"))
             else:
-                r.update(check_elf(elf, build))
+                r.update(check_elf(elf, build, bindir))
             results.append(r)
 
     meta = dict(pico_sdk=sdk_version(sdk), pico_sdk_path=sdk, gcc=gcc_version(bindir),

@@ -782,9 +782,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("elf", nargs="+")
     ap.add_argument("--build-dir", help="hwcheck build directory (default: found from the map)")
+    ap.add_argument("--objdump", help="arm-none-eabi-objdump to use (default: from PATH)")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
-    results = [analyse(e, a.build_dir) for e in a.elf]
+    results = [analyse(e, a.build_dir, a.objdump) for e in a.elf]
     if a.json:
         json.dump(results, sys.stdout, indent=2)
         print()
