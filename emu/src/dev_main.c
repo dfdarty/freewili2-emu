@@ -41,6 +41,7 @@
 #include <strings.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 
 /* ------------------------------------------------------------ link / timing */
@@ -448,6 +449,59 @@ static void cmd_gpio_pwm(const char *path, char **cur) {
     respond(path, true, "Ok");
 }
 
+/* ============================================================ board clock
+ * The board manager's real-time clock (h\t reads it, h\c sets it). It
+ * starts at the PC's local time, or at --rtc, and runs with emulator time.
+ * Kept as "local time counted like UTC" so no time zone ever applies. */
+static bool s_rtc_given;
+static int64_t s_rtc_base;          /* clock reading at emulator time 0, in seconds */
+
+bool emu_set_rtc(const char *when) {
+    struct tm t = {0};
+    int y, mo, d, h = 0, mi = 0, se = 0;
+    char sep;
+    int n = sscanf(when, "%d-%d-%d%c%d:%d:%d", &y, &mo, &d, &sep, &h, &mi, &se);
+    if (n != 3 && n < 6) return false;
+    if (n > 3 && sep != ' ' && sep != 'T') return false;
+    if (y < 2000 || y > 2099 || mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || se > 59 ||
+        h < 0 || mi < 0 || se < 0) return false;
+    t.tm_year = y - 1900; t.tm_mon = mo - 1; t.tm_mday = d;
+    t.tm_hour = h; t.tm_min = mi; t.tm_sec = se;
+    s_rtc_base = (int64_t)timegm(&t) - (int64_t)(emu_time_us() / 1000000u);
+    s_rtc_given = true;
+    return true;
+}
+
+static int64_t rtc_now(void) {
+    if (!s_rtc_given) {
+        time_t now = time(NULL);
+        struct tm lt;
+        localtime_r(&now, &lt);
+        s_rtc_base = (int64_t)timegm(&lt) - (int64_t)(emu_time_us() / 1000000u);
+        s_rtc_given = true;
+    }
+    return s_rtc_base + (int64_t)(emu_time_us() / 1000000u);
+}
+
+static void cmd_get_time(const char *path) {
+    time_t now = (time_t)rtc_now();
+    struct tm t;
+    gmtime_r(&now, &t);
+    respond(path, true, "%d %d %d %d %d %d %d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_wday,
+            t.tm_hour, t.tm_min, t.tm_sec);
+}
+
+static void cmd_set_time(const char *path, char **cur) {
+    long v[6];
+    for (int i = 0; i < 6; i++)
+        if (!arg_long(cur, &v[i])) { respond(path, false, "Invalid argument"); return; }
+    char when[48];
+    snprintf(when, sizeof when, "%ld-%ld-%ld %ld:%ld:%ld", v[0], v[1], v[2], v[3], v[4], v[5]);
+    if (!emu_set_rtc(when)) { respond(path, false, "Invalid date or time"); return; }
+    if (emu_verbose) emu_log("main: clock set to %s", when);
+    respond(path, true, "Ok");
+}
+
 static void run_command(char *line) {
     char *cur = NULL;
     char *path = strtok_r(line, " \t", &cur);
@@ -474,6 +528,10 @@ static void run_command(char *line) {
         if (!arg_long(&cur, &src) || src < 0 || src > 4) { respond(path, false, "Invalid argument"); return; }
         if (emu_verbose) emu_log("main: i\\g\\v %ld is carried out by the display firmware, not by a WiliBSP app", src);
         respond(path, true, "Ok");
+    } else if (!strcmp(path, "h\\t")) {
+        cmd_get_time(path);
+    } else if (!strcmp(path, "h\\c")) {
+        cmd_set_time(path, &cur);
     } else if (!strcmp(path, "i\\a\\u")) {
         long en;
         double volts = 0;

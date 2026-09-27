@@ -182,14 +182,28 @@ With the version WiliBSP ships, **write in pieces of 1 KB or less**, as
 `tests/apps/main_link_check` does. The emulator logs
 `main: receive ring overrun` when this happens.
 
+## The board clock
+
+The board manager keeps a real-time clock, which apps reach through MAIN:
+`ow_hardware_get_time()` (`h\t`) and `ow_hardware_set_time()` (`h\c`).
+The emulator's clock starts at the PC's local time, or at
+[`--rtc "2027-05-16 09:30:00"`](cli.md) for a run that must give the same
+dates every time, and runs with emulator time. Setting it moves it for the
+rest of the run; the weekday is worked out from the date, as on the board.
+Dates outside 2000–2099 are refused.
+
+Both calls are generated text commands, so they need about 10 KB of stack
+(see below): use them from an app built with `fw2_psram_app()`, whose stack
+has the SRAM to itself.
+
 ## Checking it
 
 - `-v` logs every OneWili response (`main: [i\g\t 00000001F681D880 3 Ok 1]`),
   GPIO changes, VREF and Vout. `-vv` also logs each SD request.
 - `tests/apps/main_link_check` is a self-test built next to the example
-  apps. It runs 55 checks through the unmodified client: every SD operation
-  and its errors, GPIO, PWM, streamed reports, Vout, `EPOWERZONE` and an
-  unmodelled command.
+  apps. It runs 60 checks through the unmodified client: every SD operation
+  and its errors, GPIO, PWM, streamed reports, Vout, the board clock,
+  `EPOWERZONE` and an unmodelled command.
 - `fw2emu hwcheck` builds the app for the board. Note that every OneWili
   text command (`ow_io_gpio_*`, `ow_io_analog_*`, …) keeps about 10 KB of
   buffers on the stack. That is more than both 4 KB scratch banks, so

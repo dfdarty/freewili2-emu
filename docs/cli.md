@@ -20,6 +20,7 @@ same options:
 | `--record FILE` | write what you do (keys, clicks, touches, F2 screenshots) as an [input script](scripting.md#recording-a-script) when the run ends, with the app's log lines as `# expect` hints |
 | `--sensor-csv FILE` | play a time-stamped sensor log from the start of the run: a CSV, or `@launch` for the built-in rocket flight ([format](sensors-and-sound.md#playing-a-sensor-log)) |
 | `--board-id HEX16` | the chip's 64-bit unique id, as `pico_get_unique_board_id()` returns it (default `E6616408432A7B15`); give two emulators different ids when they talk to each other |
+| `--rtc WHEN` | the board clock at start-up, e.g. `"2027-05-16 09:30:00"`; it then runs with emulator time. Without it the clock starts at the PC's local time. Apps read and set it with `ow_hardware_get_time()` / `ow_hardware_set_time()` ([MAIN link](main-link.md#the-board-clock)) |
 | `--perf` | log bus load and LCD throughput once a second (`perf: SPI1 62.5 MHz 41%  I2C1 400 kHz 2%  LCD 10.4 screens/s`); the same line is always on the device's bottom edge — see [bus timing](debugging.md#is-it-fast-enough-bus-timing) |
 | `--instant-bus` | SPI and I2C transfers take no time, as before bus timing existed; for comparing, not for testing |
 | `--sdcard DIR` | folder that stands in for the SD card in the MAIN CPU's slot (default `./sdcard`, created with sample files on first use; `none` = no card) — see [The MAIN processor link](main-link.md) |

@@ -130,6 +130,20 @@ static void sd_checks(void) {
     check(ok && ow_sd_close(&f) == OW_OK, "seek + read in the middle of the large file");
 }
 
+/* ---------------------------------------------------------- board clock */
+static void clock_checks(void) {
+    int32_t y, mo, d, wd, h, mi, se;
+    check(ow_hardware_get_time(&dev, &y, &mo, &d, &wd, &h, &mi, &se) == OW_OK && y >= 2000 && mo >= 1 &&
+          mo <= 12 && d >= 1 && wd >= 0 && wd <= 6, "the board clock reads a date");
+    check(ow_hardware_set_time(&dev, 2027, 5, 16, 9, 59, 58) == OW_OK, "set the clock");
+    sleep_ms(2100);
+    bool ok = ow_hardware_get_time(&dev, &y, &mo, &d, &wd, &h, &mi, &se) == OW_OK;
+    checkf(ok && y == 2027 && mo == 5 && d == 16 && h == 10 && mi == 0 && se <= 1,
+           "it keeps time (10:00:%02ld after 2 s)", (long)se, 0);
+    check(ok && wd == 0, "the weekday comes from the date (16 May 2027 is a Sunday)");
+    check(ow_hardware_set_time(&dev, 2027, 13, 1, 0, 0, 0) == OW_ERR_FAILED, "month 13 is refused");
+}
+
 /* ---------------------------------------------------------------- GPIO */
 static uint32_t read_all(void) {
     uint32_t v = 0;
@@ -233,6 +247,7 @@ int main(void) {
 
     sd_checks();
     gpio_checks();
+    clock_checks();
 
     char line[64];
     snprintf(line, sizeof line, "%d CHECKS, %d FAILED", n_checks, n_failed);

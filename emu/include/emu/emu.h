@@ -80,6 +80,7 @@ bool emu_core_idle(uint64_t wake_us);              /* wait loops: false = no oth
 bool emu_core_irqs_off(unsigned core);             /* that core's PRIMASK */
 bool emu_in_service(void);                         /* inside emu_poll's device servicing */
 bool emu_set_board_id(const char *hex16);          /* --board-id */
+bool emu_set_rtc(const char *when);               /* --rtc "YYYY-MM-DD HH:MM:SS" */
 void emu_irq_raise_core(unsigned core, unsigned irq); /* a per-core source (SIO FIFO, doorbell) */
 void emu_irq_deliver_pending(void);                /* run IRQs held for the current core */
 

@@ -6,6 +6,10 @@ change that would break a v1 workflow gets a new major version.
 
 ## [Unreleased]
 
+### Added
+- The board clock: `ow_hardware_get_time()` and `ow_hardware_set_time()`
+  work, starting at the PC's local time or at `--rtc "YYYY-MM-DD HH:MM:SS"`.
+
 ## [1.0.0] — 2026-09-27
 
 The first release.

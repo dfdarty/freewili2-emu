@@ -545,6 +545,7 @@ static void usage(void) {
         "  --mic-wav WAV       sound reaching the microphones (looped)\n"
         "  --mute              don't play audio through the PC\n"
         "  --board-id HEX16    the RP2350's 64-bit unique id (default E6616408432A7B15)\n"
+        "  --rtc WHEN          the board clock at start, \"2027-05-16 09:30:00\" (default: the PC's local time)\n"
         "  --sensor-csv FILE   play a sensor log (CSV, or @launch for the built-in rocket flight)\n"
         "  --record FILE       write what you do (keys, clicks, touches) as an input script\n"
         "  --perf              log bus load and LCD throughput once a second\n"
@@ -590,6 +591,9 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--sensor-csv") && i + 1 < argc) sensor_csv = argv[++i];
         else if (!strcmp(a, "--board-id") && i + 1 < argc) {
             if (!emu_set_board_id(argv[++i])) { fprintf(stderr, "bad --board-id %s (16 hex digits)\n", argv[i]); return 2; }
+        }
+        else if (!strcmp(a, "--rtc") && i + 1 < argc) {
+            if (!emu_set_rtc(argv[++i])) { fprintf(stderr, "bad --rtc %s (\"YYYY-MM-DD HH:MM:SS\")\n", argv[i]); return 2; }
         }
         else if (!strcmp(a, "--instant-bus")) emu_bus_timing = false;
         else if (!strcmp(a, "--sdcard") && i + 1 < argc) sdcard = argv[++i];
