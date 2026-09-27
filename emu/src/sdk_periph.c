@@ -19,6 +19,8 @@
 #include "pico/time.h"
 
 #include <string.h>
+#include <errno.h>
+#include <stdio.h>
 
 #if !defined(__EMSCRIPTEN__) && !defined(_WIN32)
 #include <sys/mman.h>
@@ -656,6 +658,23 @@ bool set_sys_clock_khz(uint32_t khz, bool required) { (void)required; s_clk[clk_
 #define EMU_PSRAM_BASE 0x11000000u
 static bool s_psram_ok;
 
+#if !defined(__EMSCRIPTEN__) && !defined(_WIN32)
+/* The PSRAM window is part of the executable image: a NOBITS section linked
+ * at 0x11000000 (-Wl,--section-start=.fw2psram=0x11000000, non-PIE), so the
+ * kernel maps it at exec time, before it places the heap. Mapping it with
+ * mmap() at run time instead lost a race about 1 run in 50: current x86-64
+ * kernels randomise the start of the brk heap up to 1 GB above the program,
+ * and it sometimes landed inside 0x11000000-0x117fffff. */
+_Static_assert(PICO_PSRAM_SIZE_BYTES == 8388608, "update the .zero size below");
+__asm__(".pushsection .fw2psram,\"aw\",@nobits\n"
+        ".balign 4096\n"
+        ".globl emu_psram_window\n"
+        "emu_psram_window:\n"
+        ".zero 8388608\n"
+        ".popsection\n");
+extern unsigned char emu_psram_window[];
+#endif
+
 bool emu_psram_map(void) {
 #if defined(__EMSCRIPTEN__)
     /* Linked with GLOBAL_BASE above the PSRAM window, so linear memory at
@@ -664,11 +683,11 @@ bool emu_psram_map(void) {
     s_psram_ok = (uintptr_t)&__global_base >= EMU_PSRAM_BASE + (uintptr_t)PICO_PSRAM_SIZE_BYTES;
     if (s_psram_ok) memset((void *)(uintptr_t)EMU_PSRAM_BASE, 0, (size_t)PICO_PSRAM_SIZE_BYTES);
 #elif !defined(_WIN32)
-    void *want = (void *)(uintptr_t)EMU_PSRAM_BASE;
-    void *p = mmap(want, (size_t)PICO_PSRAM_SIZE_BYTES, PROT_READ | PROT_WRITE,
-                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
-    s_psram_ok = (p == want);
-    if (p != MAP_FAILED && p != want) munmap(p, (size_t)PICO_PSRAM_SIZE_BYTES);
+    s_psram_ok = (uintptr_t)emu_psram_window == EMU_PSRAM_BASE;
+    if (!s_psram_ok)
+        emu_log("psram: window linked at %p, not 0x%08lx (link with -no-pie and "
+                "-Wl,--section-start=.fw2psram=0x11000000)", (void *)emu_psram_window,
+                (unsigned long)EMU_PSRAM_BASE);
 #endif
     return s_psram_ok;
 }

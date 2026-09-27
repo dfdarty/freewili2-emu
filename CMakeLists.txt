@@ -146,12 +146,15 @@ else()
         target_compile_definitions(freewili2_bsp PRIVATE FW2EMU_HEADLESS_ONLY=1)
     endif()
     target_link_libraries(freewili2_bsp PUBLIC m)
+    # Emulated PSRAM is a NOBITS section of the executable at its real address
+    # (see emu_psram_window in sdk_periph.c), so link non-PIE and pin it there.
+    target_link_options(freewili2_bsp PUBLIC "-no-pie" "-Wl,--section-start=.fw2psram=0x11000000")
     if(FW2_AGENTIO)
         # agentio keeps its screen shadow at the top of PSRAM and checks that the
         # linker placed nothing there (&__psram_end__ <= shadow). Nothing is placed
         # in emulated PSRAM, so pin the marker to the PSRAM base. Non-PIE linking
         # keeps that absolute symbol from being relocated to the load address.
-        target_link_options(freewili2_bsp PUBLIC "-Wl,--defsym=__psram_end__=0x11000000" "-no-pie")
+        target_link_options(freewili2_bsp PUBLIC "-Wl,--defsym=__psram_end__=0x11000000")
     endif()
 endif()
 
