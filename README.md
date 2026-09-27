@@ -56,8 +56,9 @@ display (SSH, a container)? The emulator notices and runs headless.
 
 It can't run `.uf2` files (apps are rebuilt from source), and it doesn't model
 radios, USB host, DVI output or the CPU's real speed — check those on the
-board. Or open the repository in **GitHub Codespaces** for a ready-made
-environment. See [Install and run](https://dfdarty.github.io/freewili2-emu/getting-started/).
+board. On Windows it runs in WSL2 ([steps](https://dfdarty.github.io/freewili2-emu/windows/));
+or open the repository in **GitHub Codespaces** for a ready-made
+environment. VS Code tasks and a debug setup come with it. See [Install and run](https://dfdarty.github.io/freewili2-emu/getting-started/).
 
 ## What's in it
 

@@ -16,6 +16,11 @@ change that would break a v1 workflow gets a new major version.
 - A weekly workflow that moves WiliBSP to its latest commit, runs every test
   and the hardware check, and opens a pull request with the results.
 - Issue and pull-request templates, and this changelog.
+- Windows (WSL2) and VS Code: a setup page, and `.vscode` tasks (run, test,
+  record, hwcheck, new app), gdb debug configurations and IntelliSense
+  (`compile_commands.json` in every build).
+- `fw2emu run --build-only`; `bin/current-app` points at the last app built.
+- `fw2emu test` prints failures as `file:line: error:` for editors.
 
 ### Changed
 - Ctrl+C ends a run cleanly: a recording or `--audio-out` file is still

@@ -1,0 +1,34 @@
+{
+  // Run and Debug > "FW2: debug this app": builds the app whose file is open
+  // (Debug build) and starts it under gdb with the window open. Breakpoints
+  // in your app and in WiliBSP work; the app's main() is fw2_emu_app_main.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "FW2: debug this app",
+      "type": "cppdbg",
+      "request": "launch",
+      "preLaunchTask": "FW2: build this app for debugging",
+      "program": "${workspaceFolder}/build-run-debug/bin/current-app",
+      "args": ["--mute"],
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "setupCommands": [
+        { "description": "Pretty printing", "text": "-enable-pretty-printing", "ignoreFailures": true }
+      ]
+    },
+    {
+      "name": "FW2: debug this app's test (headless)",
+      "type": "cppdbg",
+      "request": "launch",
+      "preLaunchTask": "FW2: build this app for debugging",
+      "program": "${workspaceFolder}/build-run-debug/bin/current-app",
+      "args": ["--headless", "--script", "${relativeFileDirname}/test.txt"],
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "setupCommands": [
+        { "description": "Pretty printing", "text": "-enable-pretty-printing", "ignoreFailures": true }
+      ]
+    }
+  ]
+}

@@ -67,9 +67,10 @@ tools/fw2emu run path/to/my_app --headless --script test.txt # emulator flags go
 ```
 
 !!! info "Other platforms"
-    Native builds are developed and tested on Ubuntu 24.04. macOS and
-    Windows are not tested; on Windows, WSL2 or a Codespace is the
-    straightforward route. The browser version works everywhere.
+    Native builds are developed and tested on Ubuntu 24.04. **On Windows**,
+    use WSL2: [Windows (WSL2) and VS Code](windows.md) has the steps, and the
+    repository's VS Code tasks and debug setup. macOS is not tested. The
+    browser version works everywhere.
 
 ## The browser build yourself
 

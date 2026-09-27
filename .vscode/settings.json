@@ -1,0 +1,7 @@
+{
+  // IntelliSense from the build of the app last run with the tasks below.
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build-run/compile_commands.json",
+  "C_Cpp.default.cStandard": "c11",
+  "files.associations": { "*.pio.h": "c", "test.txt": "plaintext" },
+  "search.exclude": { "build*/**": true, "out/**": true, "site/**": true }
+}

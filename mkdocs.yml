@@ -48,6 +48,7 @@ nav:
   - Getting started:
       - Install and run: getting-started.md
       - Your first app: first-app.md
+      - Windows (WSL2) and VS Code: windows.md
       - Controls: controls.md
   - Using the emulator:
       - Command line: cli.md

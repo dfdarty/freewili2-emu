@@ -473,6 +473,18 @@ def cmd_run(a):
     build = os.path.abspath(a.build_dir or os.path.join(ROOT, "build-run" + suffix))
     target, bindir = build_one_app(a.app, build, cmake_args)
     exe = os.path.join(bindir, target)
+    # bin/current-app always points at the app built last, so a debugger
+    # configuration (e.g. .vscode/launch.json) needs no per-app path.
+    link = os.path.join(bindir, "current-app")
+    try:
+        if os.path.lexists(link):
+            os.remove(link)
+        os.symlink(target, link)
+    except OSError:
+        pass
+    if a.build_only:
+        print(exe)
+        return 0
     args = a.emu_args[1:] if a.emu_args[:1] == ["--"] else a.emu_args
     if a.m32 and "--headless" not in args:
         print("fw2emu: note: the -m32 build has no window unless configured with SDL; adding --headless",
@@ -641,6 +653,10 @@ def cmd_test(a):
     for s_ in shots:
         print(f"  screenshot: {s_}", file=sys.stderr)
 
+    for f in fails:                 # file:line: error: — editors (VS Code's $gcc matcher) jump to it
+        m = re.search(r"script line (\d+)", f)
+        msg = re.sub(r"^(FAIL |FATAL: )?script line \d+: ", "", f)
+        print(f"{rel}:{m.group(1) if m else 1}: error: {msg}", file=sys.stderr)
     if os.environ.get("GITHUB_ACTIONS") == "true":
         for f in fails:
             m = re.search(r"script line (\d+)", f)
@@ -1126,6 +1142,8 @@ def main():
     r.add_argument("--m32", action="store_true", help="32-bit build (FW2_EMU_32BIT), headless")
     r.add_argument("--debug", action="store_true", help="CMAKE_BUILD_TYPE=Debug")
     r.add_argument("--gdb", action="store_true", help="Debug build, run under gdb, break in the app's main")
+    r.add_argument("--build-only", action="store_true",
+                   help="build, print the program's path and stop (bin/current-app also points at it)")
     r.set_defaults(func=cmd_run)
 
     w = sub.add_parser("web", help="build one app folder for the browser and serve it locally",

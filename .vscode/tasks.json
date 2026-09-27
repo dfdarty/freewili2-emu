@@ -1,0 +1,54 @@
+{
+  // Terminal > Run Task... Each task works on the app whose file is open in
+  // the editor (its folder: ${relativeFileDirname}), e.g. apps/my_app/main.c.
+  // https://dfdarty.github.io/freewili2-emu/windows/#vs-code
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "FW2: run this app",
+      "type": "shell",
+      "command": "tools/fw2emu run ${relativeFileDirname}",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": "$gcc",
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "FW2: test this app (test.txt)",
+      "type": "shell",
+      "command": "tools/fw2emu test ${relativeFileDirname}",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": "$gcc",
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "FW2: record a test (writes recorded.txt)",
+      "type": "shell",
+      "command": "tools/fw2emu run ${relativeFileDirname} --record ${relativeFileDirname}/recorded.txt",
+      "problemMatcher": "$gcc",
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "FW2: check it fits the real chip (hwcheck)",
+      "type": "shell",
+      "command": "tools/fw2emu hwcheck --fetch-toolchain ${relativeFileDirname}",
+      "problemMatcher": "$gcc",
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "FW2: new app in apps/",
+      "type": "shell",
+      "command": "tools/fw2emu new apps/${input:newApp}",
+      "problemMatcher": []
+    },
+    {
+      "label": "FW2: build this app for debugging",
+      "type": "shell",
+      "command": "tools/fw2emu run --debug --build-only ${relativeFileDirname}",
+      "problemMatcher": "$gcc",
+      "presentation": { "reveal": "silent" }
+    }
+  ],
+  "inputs": [
+    { "id": "newApp", "type": "promptString", "description": "Name of the new app (a folder in apps/)", "default": "my_app" }
+  ]
+}

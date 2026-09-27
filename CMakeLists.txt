@@ -37,6 +37,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 # ------------------------------------------------------------------ fidelity
 # Native-only build options that make host runs closer to (or stricter than)
 # the real RP2350. See docs/debugging.md.
+# compile_commands.json in every build folder, for editors (clangd, VS Code C/C++)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 option(FW2_EMU_SANITIZE "Build app, BSP and emulator with AddressSanitizer + UBSan (native only)" OFF)
 option(FW2_EMU_32BIT "Build a 32-bit (-m32) emulator so pointer-size bugs show up as on the RP2350 (native only)" OFF)
 if(EMSCRIPTEN AND (FW2_EMU_SANITIZE OR FW2_EMU_32BIT))

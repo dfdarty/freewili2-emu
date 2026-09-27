@@ -1,0 +1,8 @@
+{
+  // Offered when the folder is opened. WSL: open this folder from Ubuntu with `code .`.
+  "recommendations": [
+    "ms-vscode.cpptools",
+    "ms-vscode-remote.remote-wsl",
+    "ms-vscode-remote.remote-containers"
+  ]
+}
