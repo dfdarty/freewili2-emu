@@ -12,7 +12,7 @@ jobs:
     name: native build + smoke
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive     # WiliBSP's nested libs/onewili (the MAIN-CPU link)
       - name: Install dependencies
@@ -23,7 +23,7 @@ jobs:
         run: tests/smoke.sh
       - name: Upload screenshots and logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: smoke-native
           path: |
@@ -35,7 +35,7 @@ jobs:
     name: sanitizers (ASan + UBSan) + smoke
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive     # WiliBSP's nested libs/onewili (the MAIN-CPU link)
       - name: Install dependencies
@@ -53,7 +53,7 @@ jobs:
           CMAKE_ARGS: -DFW2_EMU_SANITIZE=ON
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: smoke-sanitize
           path: |
@@ -65,7 +65,7 @@ jobs:
     name: 32-bit build + smoke
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive     # WiliBSP's nested libs/onewili (the MAIN-CPU link)
       - name: Install dependencies
@@ -79,7 +79,7 @@ jobs:
           CMAKE_ARGS: -DFW2_EMU_32BIT=ON
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: smoke-m32
           path: out/*.log
@@ -89,7 +89,7 @@ jobs:
     name: real-hardware check (Pico SDK + Arm GNU Toolchain 14.2.Rel1)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive     # WiliBSP's libs/onewili is needed for hardware builds
       - name: Install dependencies
@@ -99,7 +99,7 @@ jobs:
       # Arm GNU Toolchain 14.2.Rel1 (what WiliBSP builds with), Pico SDK 2.3.0
       # and picotool all live in ~/.cache/fw2emu.
       - name: Cache toolchain, Pico SDK and picotool
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/fw2emu
           key: fw2emu-arm-14.2.rel1-pico-sdk-2.3.0-${{ runner.os }}-${{ hashFiles('tools/fw2emu') }}
@@ -116,7 +116,7 @@ jobs:
           tools/fw2emu hwcheck --fetch-toolchain -v -o out/hwcheck.json
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: hwcheck
           path: out/hwcheck*.json
@@ -126,14 +126,14 @@ jobs:
     name: web build (Emscripten 4.0.15)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive     # WiliBSP's nested libs/onewili (the MAIN-CPU link)
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends cmake ninja-build python3
-      - uses: mymindstorm/setup-emsdk@v14
+      - uses: mymindstorm/setup-emsdk@v16
         with:
           version: 4.0.15
           actions-cache-folder: emsdk-cache

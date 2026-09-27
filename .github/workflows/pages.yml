@@ -25,14 +25,14 @@ jobs:
     if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive     # WiliBSP's nested libs/onewili (the MAIN-CPU link)
       - name: Install build tools
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends cmake ninja-build python3
-      - uses: mymindstorm/setup-emsdk@v14
+      - uses: mymindstorm/setup-emsdk@v16
         with:
           version: 4.0.15
           actions-cache-folder: emsdk-cache-pages
@@ -40,7 +40,7 @@ jobs:
         run: |
           emcmake cmake -S . -B build-web -G Ninja -DCMAKE_BUILD_TYPE=Release -DFW2_EMU_WEB_DEMO=ON
           cmake --build build-web
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -55,8 +55,8 @@ jobs:
           cp build-web/bin/index.html build-web/bin/apps.json \
              build-web/bin/*.js build-web/bin/*.wasm site/emulator/
           ls -l site site/emulator
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
@@ -68,4 +68,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
