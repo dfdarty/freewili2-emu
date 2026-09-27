@@ -6,26 +6,6 @@ change that would break a v1 workflow gets a new major version.
 
 ## [Unreleased]
 
-### Added
-- Record a session as an input script: `--record FILE`, or **● Record** in
-  the browser. The app's log lines after each step come along as
-  `# expect` hints.
-- `tools/fw2emu new DIR [--repo]` and `examples/app-template`: a new app with
-  its test (and, with `--repo`, a README and a workflow that tests every
-  push).
-- A weekly workflow that moves WiliBSP to its latest commit, runs every test
-  and the hardware check, and opens a pull request with the results.
-- Issue and pull-request templates, and this changelog.
-- Windows (WSL2) and VS Code: a setup page, and `.vscode` tasks (run, test,
-  record, hwcheck, new app), gdb debug configurations and IntelliSense
-  (`compile_commands.json` in every build).
-- `fw2emu run --build-only`; `bin/current-app` points at the last app built.
-- `fw2emu test` prints failures as `file:line: error:` for editors.
-
-### Changed
-- Ctrl+C ends a run cleanly: a recording or `--audio-out` file is still
-  written.
-
 ## [1.0.0] — 2026-09-27
 
 The first release.
@@ -58,6 +38,24 @@ The first release.
   against the chip's limits.
 - Sanitizer and 32-bit builds.
 - A GitHub Action for app repositories.
+
+### Tools for app developers
+- Record a session as an input script: `--record FILE`, or **● Record** in
+  the browser. The app's log lines after each step come along as
+  `# expect` hints.
+- `tools/fw2emu new DIR [--repo]` and `examples/app-template`: a new app with
+  its test (and, with `--repo`, a README and a workflow that tests every
+  push).
+- A weekly workflow that moves WiliBSP to its latest commit, runs every test
+  and the hardware check, and opens a pull request with the results.
+- Issue and pull-request templates, and this changelog.
+- Windows (WSL2) and VS Code: a setup page, and `.vscode` tasks (run, test,
+  record, hwcheck, new app), gdb debug configurations and IntelliSense
+  (`compile_commands.json` in every build).
+- `fw2emu run --build-only`; `bin/current-app` points at the last app built.
+- `fw2emu test` prints failures as `file:line: error:` for editors.
+- Ctrl+C ends a run cleanly: a recording or `--audio-out` file is still
+  written.
 
 [Unreleased]: https://github.com/dfdarty/freewili2-emu/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/dfdarty/freewili2-emu/releases/tag/v1.0.0
