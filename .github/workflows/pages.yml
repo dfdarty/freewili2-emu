@@ -20,6 +20,9 @@ concurrency:
 
 jobs:
   build:
+    # Only publish while the repository is public (a private repo on the free
+    # plan can't serve Pages); this resumes by itself once it's public again.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
