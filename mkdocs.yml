@@ -1,0 +1,63 @@
+site_name: freewili2-emu
+site_description: Run FREE-WILi 2 apps before the hardware is in hand — an unofficial emulator for WiliBSP apps.
+site_url: https://dfdarty.github.io/freewili2-emu/
+repo_url: https://github.com/dfdarty/freewili2-emu
+repo_name: dfdarty/freewili2-emu
+edit_uri: edit/main/docs/
+copyright: MIT licensed · Unofficial project, not affiliated with FREE-WILi LLC
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle: { icon: material/weather-night, name: Dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle: { icon: material/weather-sunny, name: Light mode }
+  font: { text: Inter, code: JetBrains Mono }
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+  icon: { repo: fontawesome/brands/github }
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc: { permalink: true }
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight: { anchor_linenums: true }
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.tabbed: { alternate_style: true }
+
+nav:
+  - Home: index.md
+  - Try it in the browser: https://dfdarty.github.io/freewili2-emu/emulator/
+  - Getting started:
+      - Install and run: getting-started.md
+      - Your first app: first-app.md
+      - Controls: controls.md
+  - Using the emulator:
+      - Command line: cli.md
+      - Input scripts: scripting.md
+      - Sensors and sound: sensors-and-sound.md
+      - WiliBSP's agent tools: wilibsp-tools.md
+  - Trusting the results:
+      - Debugging and hardware checks: debugging.md
+      - Accuracy and known differences: accuracy.md
+      - App compatibility: compatibility.md
+  - Help:
+      - Troubleshooting: troubleshooting.md
+      - Reporting bugs and contributing: contributing.md

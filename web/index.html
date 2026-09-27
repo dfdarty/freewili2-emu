@@ -47,6 +47,7 @@
   input[type=range] { width: 100%; accent-color: var(--accent); }
   footer { color: var(--muted); font-size: 12px; padding: 0 20px 20px; max-width: 1240px; margin: 0 auto; }
   a { color: var(--accent); }
+  header a.docs { text-decoration: none; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
 </style>
 </head>
 <body>
@@ -55,6 +56,7 @@
   <label>app <select id="app"></select></label>
   <button id="restart" type="button">Restart</button>
   <span id="desc"></span>
+  <a class="docs" href="https://dfdarty.github.io/freewili2-emu/" target="_blank" rel="noopener">Docs</a>
 </header>
 <main>
   <div id="stage">
@@ -91,7 +93,8 @@
   Radios, bus timing and analog behaviour are not modelled — verify on hardware.
   <br>Unofficial project, not affiliated with FREE-WILi LLC. Found something the emulator
   gets wrong? <a href="https://github.com/dfdarty/freewili2-emu/issues">Report it here</a>,
-  not to FREE-WILi. · <a href="https://github.com/dfdarty/freewili2-emu">source</a>
+  not to FREE-WILi. · <a href="https://dfdarty.github.io/freewili2-emu/">docs</a> ·
+  <a href="https://github.com/dfdarty/freewili2-emu">source</a>
 </footer>
 <script>
 (async () => {
