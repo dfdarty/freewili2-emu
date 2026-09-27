@@ -15,16 +15,20 @@ One command per line; `#` starts a comment.
 | `screenshot FILE [lcd\|device]` | PNG of the 480x320 LCD, or the whole front panel |
 | `log TEXT` | print a marker |
 | `header` | log the MAIN CPU's GPIO header: each pin's level, VIO and Vout ([MAIN link](main-link.md#header-gpio-and-vio)) |
-| `quit` | end the run |
+| `expect REGEX [MS]` | wait for a log line matching REGEX (default 2000 ms); if none comes, the run fails ([below](#pass-or-fail-expect)) |
+| `quit` | end the run (exit status 0) |
 
 Buttons: `GREY YELLOW GREEN BLUE RED CENTER UP DOWN LEFT RIGHT HOME OK CANCEL PAGE`.
+
+A run with a script ends the process when the script says `quit` (or when
+`--run-ms` runs out), with or without a window.
 
 `set` names (the same names work as `--sensor NAME=V,V` and from the web page):
 
 | Name | Values | Meaning |
 |---|---|---|
 | `temp` | °C | SHT40 temperature |
-| `rh` | % | SHT40 relative humidity |
+| `rh` (or `humidity`) | % | SHT40 relative humidity |
 | `lux` | lux | OPT4001 light |
 | `accel` | x y z (g) | BMI323 acceleration |
 | `gyro` | x y z (°/s) | BMI323 rotation rate |
@@ -55,3 +59,29 @@ screenshot out/after.png device
 hold HOME
 wait 5600            # WiliBSP recovery: HOME held 5 s exits the app
 ```
+
+## Pass or fail: `expect`
+
+```text
+press OK
+expect "count=1"                 # default timeout 2000 ms
+expect "temp=2[0-9]{3} centi" 5000
+```
+
+`expect` pauses the script until a line of output matches the regular
+expression, a POSIX extended regex (the dialect of `grep -E`). Put it in
+double quotes if it contains spaces; `\"` is a quote inside it.
+
+- **Which lines.** Every `DIAG()` line and every emulator log line, without
+  the `[diag]` / `[emu]` prefix. That includes the script's own lines, so
+  `header` followed by `expect "25=1\(out\)"` checks a pin.
+- **From where.** `expect` looks at lines after the one the previous
+  `expect` matched, including lines printed before the script got to it. So
+  `press OK` followed by `expect "count=1"` works even if the app logged the
+  count during the press.
+- **On a timeout** the emulator logs `FAIL script line N: expect /REGEX/ …`
+  and stops at once with exit status 1, which fails `tests/smoke.sh` and CI.
+  A `--shot-on-exit` screenshot is still taken.
+
+It works the same natively, in the sanitizer and 32-bit builds, and in
+WebAssembly under Node.

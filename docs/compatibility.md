@@ -4,9 +4,14 @@ WiliBSP ships 17 example apps. They are the best measure of how much of the
 board the emulator covers: each one below either runs unmodified, or is
 blocked by a part that isn't modelled yet.
 
-**12 of 17 run.** Each running app has a headless test in `tests/scripts/`
-that CI runs on every change, and CI also checks it against the real chip's
-limits with [`fw2emu hwcheck`](debugging.md#real-hardware-check-toolsfw2emu-hwcheck).
+**12 of 17 run.** On every push, CI runs each of them headless with its
+script in `tests/scripts/` (natively, with sanitizers and as a 32-bit build),
+and builds all of them for the board with
+[`fw2emu hwcheck`](debugging.md#real-hardware-check-toolsfw2emu-hwcheck)
+using the Arm GNU Toolchain 14.2.Rel1. hwcheck fails CI on any error except
+the known upstream issues listed [below](#known-upstream-issues), which it
+reports without failing. The web build is compiled in CI but not run
+there.
 
 | App | Status | What it exercises / what's missing |
 |---|---|---|
@@ -26,16 +31,24 @@ limits with [`fw2emu hwcheck`](debugging.md#real-hardware-check-toolsfw2emu-hwch
 | `hello_ir` | ❌ | needs the infrared transmitter and receiver |
 | `hello_cc1101` | ❌ | needs the CC1101 sub-GHz radio |
 | `hello_usbdrive` | ❌ | needs USB host and a USB drive |
-| `hello_dvi` | ❌ | needs HSTX DVI output (stubbed) |
+| `hello_dvi` | ❌ | fails to link: HSTX DVI output is stubbed, and the DVI on-screen-display functions (`dvi_osd_*`) aren't provided |
 
-¹ The emulator runs it; building it for the board with WiliBSP on Linux or
-macOS currently fails WiliBSP's own layout check, which `hwcheck` reports.
-That is an upstream build-script issue, not an emulator one.
+¹ ² Runs here; building it for the board hits a
+[known upstream issue](#known-upstream-issues).
 
-² Runs here. For the board, `hwcheck` reports a stack of about 10.9 KB,
-more than the RP2350's two 4 KB scratch banks. Every generated OneWili text
-command keeps its buffers on the stack. That is an upstream client issue;
-see [the MAIN link page](main-link.md#checking-it).
+## Known upstream issues
+
+These come from WiliBSP or its libraries, not from the app or the emulator.
+`fw2emu hwcheck` knows them for WiliBSP's own example apps only: it reports
+them as `KNOWN (upstream)` with the reason, and they don't change its exit
+status (`--strict` makes them count). The same failure in your own app is an
+ordinary error. The list is in `tools/fw2emu` (`KNOWN_UPSTREAM`); if one of
+them stops happening, hwcheck warns so the list can be updated.
+
+| App | Failure | Reason |
+|---|---|---|
+| `hello_psram_exec` | post-link layout check | WiliBSP's `bsp/app/psram_link` selects the SDK objects for the SRAM bootstrap as `*.c.obj`, the Windows object naming. With `*.c.o` (Linux, macOS) the clock and QMI code lands in PSRAM, and the app's own `verify_layout.py` rejects the image. |
+| `toggleled`, `hello_vref` | stack (~10.9 KB) | Every generated OneWili text command keeps its buffers on the stack: 5 KB in the call plus 5 KB in `ow__call`. That is more than the RP2350's two 4 KB scratch banks together. The SD calls don't have this problem; see [the MAIN link page](main-link.md#checking-it). |
 
 ## Planned order
 

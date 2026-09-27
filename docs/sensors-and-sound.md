@@ -30,14 +30,18 @@ set tilt 30 0
 Each model speaks the register or command protocol the WiliBSP driver
 expects — measurement commands and CRCs for the SHT40, conversion and
 exponent encoding for the OPT4001, the BMI323's range settings, the BMM350's
-compensation — so the driver's own conversion code runs. The values you set
-are exactly what a correct driver reads back.
+compensation — so the driver's own conversion code runs. A correct driver
+reads back the values you set, to the part's resolution: each model sends
+the nearest value its part can represent (the SHT40, for example, resolves
+0.003 °C and 0.002 %RH).
 
 The sensors are powered by the **SENSORS** power zone. An app that forgets
 to request it gets no answer on I2C, as on the board.
 
-The browser page's **heading** slider sets `mag` for a field of 26 µT
-horizontal and 38 µT downward, rotated to the chosen heading.
+The browser page's sliders start at the model's values, including any
+`--sensor` given in the page's `?args=`. The **heading** slider turns the
+horizontal part of the field (`mag`) to the chosen heading and keeps its
+strength and the downward part.
 
 There is no motion model yet: `accel` and `gyro` hold whatever you set until
 you change them. Scripts can change them over time with `set` and `wait`.

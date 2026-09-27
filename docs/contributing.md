@@ -25,7 +25,8 @@ hwcheck/            CMake project for real-hardware builds (used by fw2emu hwche
 tools/              fw2emu helper, stack analysis
 third_party/wilibsp WiliBSP, pinned submodule (never modified here)
 web/                browser page
-tests/              headless scripts, log expectations, smoke test
+tests/              headless scripts, log expectations, smoke test;
+                    tests/apps/ holds self-test apps (e.g. main_link_check)
 docs/               this site
 ```
 
@@ -67,8 +68,9 @@ This site is built with [MkDocs Material](https://squidfunk.github.io/mkdocs-mat
 from the `docs/` folder:
 
 ```sh
-pip install mkdocs-material
-mkdocs serve        # live preview on http://127.0.0.1:8000
+pip install -r requirements-docs.txt
+mkdocs serve                # live preview on http://127.0.0.1:8000
+mkdocs build --strict       # as the Pages workflow does: fails on broken links
 ```
 
 Every page has an edit link at the top.

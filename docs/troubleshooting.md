@@ -17,6 +17,14 @@ OneWili client (the MAIN-CPU link) is a submodule inside WiliBSP.
 **`SDL2` not found.** Install `libsdl2-dev`, or configure with
 `-DFW2_EMU_SDL=OFF` for a headless-only build.
 
+**Compiler warnings from WiliBSP.** These two are expected and harmless;
+they are in WiliBSP's own sources, which the emulator compiles unmodified:
+
+```text
+third_party/wilibsp/bsp/platform/psram.c: … warning: array subscript … is partly outside array bounds … [-Warray-bounds=]
+third_party/wilibsp/bsp/sensors/bmi323.c: … warning: 'id' may be used uninitialized [-Wmaybe-uninitialized]
+```
+
 **My app fails to build with a missing header or an undefined function.**
 It uses a driver for a part the emulator doesn't model yet — see
 [App compatibility](compatibility.md).
@@ -28,6 +36,21 @@ so the emulator build skips it; `fw2emu hwcheck` runs it against the real
 image.
 
 ## Running
+
+**`error: XDG_RUNTIME_DIR is invalid or not set in the environment.`** SDL
+prints this when it looks for a Wayland session that isn't there. It's
+harmless. With no display at all (neither `DISPLAY` nor `WAYLAND_DISPLAY`
+set, as over SSH or in a container), the emulator doesn't try to open a
+window: it prints `no display … running headless` and runs headless. Older
+builds opened an invisible window instead and never ended.
+
+**`--run-ms` or `quit` doesn't end the program.** They do in current
+builds, window or not. Only an app that ends itself (HOME held 5 s) leaves
+its window open on the last frame, and the log says so.
+
+**`rtt: port 9090 on 127.0.0.1 is already in use`.** Another emulator (or
+OpenOCD / `fw rtt`) is already serving RTT. Stop it, or run this one without
+`--rtt`. `fw.py` only knows these port numbers, so there can't be two.
 
 **The screen stays black.**
 
@@ -55,9 +78,27 @@ page: click the device once.
 
 **`--mic-wav` fails.** It needs an uncompressed PCM WAV, 8 or 16 bit.
 
-**`fw.py` can't connect.** Start the app with `--rtt`, and run `fw.py` on the
-same machine: the ports listen on 127.0.0.1 only. `fw rtt` doesn't work (it
+**`fw.py` fails with `FileNotFoundError: [Errno 2] No such file or directory: 'openocd'`.**
+No emulator is serving RTT, so `fw.py` tried to start OpenOCD to reach a real
+board. Start the app with `--rtt`, and run `fw.py` on the same machine: the
+ports listen on 127.0.0.1 only. `fw rtt` itself doesn't work (it always
 starts OpenOCD); read the emulator's output instead.
+
+**`fw.py` fails with `RuntimeError: agentio connection closed`.** The app
+doesn't start WiliBSP's agentio harness; the emulator's log says
+`the app never called agentio_init()`. Add the three calls in
+[WiliBSP's agent tools](wilibsp-tools.md#what-the-app-needs).
+
+**`fw.py` output files end up inside `third_party/wilibsp`.** Run it from
+the repository root, as `python3 third_party/wilibsp/tools/fw.py …`, so
+relative paths like `-o shot.png` land in your checkout and the pinned
+submodule stays clean.
+
+**A reading is 0.01 lower than what I set** (31.5 °C shows as 31.49). The
+sensor model sends the nearest value the part can represent (the SHT40
+resolves 0.003 °C, so 31.5 goes out as 31.4996), and an app that formats
+with `(int)(x * 100)` truncates that to 31.49. Round when printing to show
+31.50.
 
 ## `fw2emu hwcheck`
 

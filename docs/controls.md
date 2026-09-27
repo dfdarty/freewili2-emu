@@ -14,7 +14,7 @@ The FREE-WILi 2 has 14 buttons and a touch screen. In the emulator window
 | ++c++, ++backspace++ | CANCEL |
 | ++p++ | PAGE |
 | ++1++ ++2++ ++3++ ++4++ ++5++ | Grey, yellow, green, blue, red (the keys under the screen) |
-| ++f2++ | Save a screenshot of the whole panel (`fw2emu-<ms>.png` in the current folder) |
+| ++f2++ | Screenshot of the whole panel: saved as `fw2emu-<ms>.png` in the current folder, or downloaded in the browser |
 
 Keys are held for as long as you hold them, so long-press gestures work:
 **hold ++h++ for 5 seconds** to exit an app (WiliBSP's recovery rule), and

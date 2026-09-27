@@ -6,8 +6,10 @@ WiliBSP's own toolchain, into a UF2 for the board.
 
 ## 1. Make the folder
 
-Put it in `apps/` inside the repository (every folder there is built
-automatically), or anywhere else and use `tools/fw2emu run`.
+Put it in `apps/` inside the repository, or anywhere else and use
+`tools/fw2emu run`. Every folder in `apps/` that has a `CMakeLists.txt` is
+built with the rest: `cmake --build build` notices a new one and
+re-configures by itself.
 
 ```sh
 mkdir -p apps/my_app
@@ -96,8 +98,9 @@ A few WiliBSP conventions this follows:
 tools/fw2emu run apps/my_app
 ```
 
-Press ++enter++ (the D-pad centre), ++o++ for OK, ++3++ for green and ++5++
-for red. See [Controls](controls.md) for every key.
+The app uses three keys: ++o++ for OK, ++3++ for green and ++5++ for red.
+Holding ++h++ (HOME) for 5 s exits it. See [Controls](controls.md) for every
+key.
 
 ![my_app after two OK presses and GREEN](first-app.png)
 
@@ -106,9 +109,10 @@ for red. See [Controls](controls.md) for every key.
 `apps/my_app/test.txt`:
 
 ```text
-wait 2500          # board_init and the power-zone handshake
+wait 3000          # board_init and the power-zone handshake
 press OK
 press OK
+expect "count=2"   # passes when the app logs it; fails the run after 2 s
 press GREEN
 wait 300
 screenshot my_app.png device
@@ -117,13 +121,49 @@ quit
 
 ```sh
 tools/fw2emu run apps/my_app --headless --script apps/my_app/test.txt
+echo $?            # 0: every expect matched; 1: one timed out
 ```
 
-The log shows `count=1` and `count=2`, and `my_app.png` is the whole front
-panel, LEDs included. [Input scripts](scripting.md) has every command,
-including touches and sensor changes.
+`expect` waits for a `DIAG()` (or emulator) line matching a regular
+expression. If none arrives in time the run stops with exit status 1 and
+says which line failed, so the script is a pass/fail test. `my_app.png` is
+the whole front panel, LEDs included. [Input scripts](scripting.md) has
+every command, including touches and sensor changes.
 
-## 5. Check it fits the real chip
+`tests/smoke.sh` also runs `apps/<app>/test.txt` for every app in `apps/`,
+so your test runs with WiliBSP's examples, in CI too.
+
+## 5. Optional: make it drivable by WiliBSP's agent tools
+
+WiliBSP's `fw.py press / touch / type / screenshot` (and agents that use
+them) talk to an in-app harness called agentio. An app has to opt in with
+three calls, on the board and in the emulator alike:
+
+```c
+    fw2_app_about_use_lcd();
+    static fw2kb_t kb;                // agentio types through WiliBSP's keyboard engine
+    fw2kb_init(&kb);
+    agentio_init();                   // before drawing anything a capture should see
+    agentio_bind_keyboard(&kb);
+    ...
+    for (;;) {
+        ...
+        agentio_task();               // serves press / touch / type / screenshot
+        tight_loop_contents();
+    }
+```
+
+Then run the app with `--rtt` and drive it from the repository root:
+
+```sh
+tools/fw2emu run apps/my_app --rtt &
+python3 third_party/wilibsp/tools/fw.py press ok
+python3 third_party/wilibsp/tools/fw.py screenshot -o shot.png
+```
+
+See [WiliBSP's agent tools](wilibsp-tools.md).
+
+## 6. Check it fits the real chip
 
 ```sh
 tools/fw2emu hwcheck apps/my_app

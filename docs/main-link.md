@@ -126,9 +126,11 @@ With the version WiliBSP ships, **write in pieces of 1 KB or less**, as
 - `fw2emu hwcheck` builds the app for the board. Note that every OneWili
   text command (`ow_io_gpio_*`, `ow_io_analog_*`, …) keeps about 10 KB of
   buffers on the stack. That is more than both 4 KB scratch banks, so
-  `hwcheck` reports `toggleled` and `hello_vref` as overflowing. The SD
+  `hwcheck` reports `toggleled` and `hello_vref` as overflowing, as a
+  [known upstream issue](compatibility.md#known-upstream-issues). The SD
   calls don't have this problem. This comes from the generated client, not
-  from the emulator.
+  from the emulator; your own app that sends text commands gets the same
+  error.
 
 ## Limits
 

@@ -7,11 +7,11 @@ same options:
 
 | Option | Effect |
 |---|---|
-| `--headless` | no window: for tests, CI and agents |
-| `--script FILE` | run an [input script](scripting.md) |
-| `--run-ms N` | stop after N milliseconds |
-| `--shot-on-exit PNG` | save the LCD as a PNG when the app exits |
-| `--rtt` | serve RTT on 127.0.0.1:9090 (DIAG text) and :9091 (agentio), like WiliBSP's `fw rtt` — see [WiliBSP's agent tools](wilibsp-tools.md) |
+| `--headless` | no window: for tests, CI and agents (automatic when there is no display, see below) |
+| `--script FILE` | run an [input script](scripting.md); its `quit` ends the process |
+| `--run-ms N` | end the run after N milliseconds |
+| `--shot-on-exit PNG` | save the LCD as a PNG when the run or the app ends |
+| `--rtt` | serve RTT on 127.0.0.1:9090 (DIAG text) and :9091 (agentio), like WiliBSP's `fw rtt` — see [WiliBSP's agent tools](wilibsp-tools.md). If a port is taken (usually by another emulator with `--rtt`), the emulator stops with an error |
 | `--rails HEX` | power zones already on at launch (default `0x8183`) |
 | `--scale N` | window scale factor |
 | `--audio-out WAV` | record everything the codec plays |
@@ -22,6 +22,23 @@ same options:
 | `-v`, `-vv` | log model activity: power commands, touches, IO expander, audio, OneWili replies; `-vv` also logs every sleep and SD request |
 
 In the browser, pass the same options in the URL: `?app=hello_audio&args=-v`.
+`--sensor` values given there also set the page's sliders.
+
+### When the process ends
+
+- A run with `--run-ms`, `--script` or `--shot-on-exit` ends the process
+  when it is over, with or without a window: exit status 0, or 1 if a
+  script [`expect`](scripting.md#pass-or-fail-expect) timed out. Errors in
+  the options or the script exit with status 2.
+- If the **app** ends itself (HOME held 5 s, `main()` returning, a panic)
+  during an interactive run with a window, the window stays open on the
+  last frame, and the log says so. Close it to quit. Headless, the process
+  exits.
+- **No display.** On Linux, when neither `DISPLAY` nor `WAYLAND_DISPLAY` is
+  set, or SDL can only offer its offscreen or dummy driver, the emulator
+  says `no display … running headless` and carries on without a window, and
+  without host audio. Stop it with ++ctrl+c++, or give it `--run-ms` or a
+  script.
 
 ## `tools/fw2emu`
 
@@ -57,13 +74,15 @@ passes the emulator options as `?args=`.
 ### `fw2emu hwcheck` — check the app against the real chip
 
 ```sh
-tools/fw2emu hwcheck [APP_DIR ...] [-v] [--json] [-o FILE] [--exclude APP]
+tools/fw2emu hwcheck [APP_DIR ...] [-v] [--json] [-o FILE] [--exclude APP] [--strict]
                      [--build-dir DIR] [--sdk PATH] [--toolchain DIR] [--fetch-toolchain]
 ```
 
 Builds with the Pico SDK and Arm GCC and reports SRAM image, RAM, PSRAM and
 worst-case stack; exits 1 on an overflow or a failed build. With no folders,
-it checks every app the emulator builds. Full description:
+it checks every app the emulator builds. Known upstream failures of
+WiliBSP's own example apps show as `KNOWN (upstream)` and don't change the
+exit status; `--strict` makes them count. Full description:
 [Debugging and hardware checks](debugging.md#real-hardware-check-toolsfw2emu-hwcheck).
 
 ## CMake options
@@ -80,7 +99,7 @@ For building with CMake directly (`cmake -S . -B build -G Ninja -D...`):
 | `FW2_EMU_32BIT` | `OFF` | `-m32` build (native only) |
 | `FW2_EMU_SDL` | `ON` (`OFF` with `FW2_EMU_32BIT`) | window and host audio via SDL2; `OFF` builds a headless-only emulator |
 | `FW2_AGENTIO` | `ON` natively, `OFF` on the web | WiliBSP's agentio harness (needed for `fw.py screenshot`) |
-| `FW2_EMU_WEB_ENV` | `web` | Emscripten environment; `web,node` runs builds headless under Node |
+| `FW2_EMU_WEB_ENV` | `web` | Emscripten environment; `web,node` runs builds headless under Node, with the host's files visible (`--script`, `--sdcard`, screenshots) |
 
 ## The test runner
 
@@ -89,9 +108,11 @@ tests/smoke.sh
 BUILD_DIR=build-asan CMAKE_ARGS="-DFW2_EMU_SANITIZE=ON" tests/smoke.sh
 ```
 
-Builds, then runs every app that has a script in `tests/scripts/<app>.txt`
-headless, each with a fresh SD card folder (`out/sdcard-<app>`).
-Screenshots, logs and audio land in `out/`. If `tests/scripts/<app>.expect`
-exists, each line is a regular expression the app's log must match; a line
-starting with `!` must not match, and `@sd PATH REGEX` checks a file the app
-left on its SD card.
+Builds, then runs every app that has a script — `tests/scripts/<app>.txt`,
+or `apps/<app>/test.txt` for your own apps — headless, each with a fresh SD
+card folder (`out/sdcard-<app>`). Screenshots, logs and audio land in
+`out/`. An app fails if it exits non-zero (a script `expect` timed out) or
+if its log doesn't meet `tests/scripts/<app>.expect` (or
+`apps/<app>/test.expect`): each line there is a regular expression the log
+must match; a line starting with `!` must not match, and `@sd PATH REGEX`
+checks a file the app left on its SD card.

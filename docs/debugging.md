@@ -116,7 +116,8 @@ tools/fw2emu hwcheck --fetch-toolchain     # use (and if needed download) Arm GN
 ```
 
 Options: `--build-dir DIR` (default `build-hw/`), `--sdk PATH`,
-`--toolchain DIR`, `--fetch-toolchain`, and `--exclude APP` (repeatable).
+`--toolchain DIR`, `--fetch-toolchain`, `--exclude APP` (repeatable) and
+`--strict` (see [known upstream issues](#known-upstream-issues)).
 
 **Requirements:**
 
@@ -134,15 +135,23 @@ Options: `--build-dir DIR` (default `build-hw/`), `--sdk PATH`,
 
   As a local fallback, the distribution's GCC also works:
   `sudo apt install gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib`.
-  Ubuntu 24.04 ships GCC 13.2. Its sizes and frames are close to 14.2's but
-  not identical, and `hwcheck` prints a note when it uses anything other
-  than 14.2.
+  Ubuntu 24.04 ships GCC 13.2, and so does the Codespace / dev container.
+  Its sizes and frames are close to 14.2's but not identical, and `hwcheck`
+  prints a note when it uses anything other than 14.2; add
+  `--fetch-toolchain` for WiliBSP's exact 14.2.
+
+  The build folder remembers which compiler configured it
+  (`fw2emu-toolchain.json`). If you switch (for example by adding
+  `--fetch-toolchain` later), `hwcheck` says `toolchain changed …` and
+  configures the folder again from scratch. The version in the report's
+  header comes from the linked images (their `.comment` section), so it
+  names the compiler that actually built them.
 - The Pico SDK 2.3.0. The tool looks for it in this order: `PICO_SDK_PATH`,
   then `~/.pico-sdk/sdk/2.3.0` (where WiliBSP's `fw` tool expects it). If it
   finds neither, it clones the SDK into `~/.cache/fw2emu/pico-sdk-2.3.0` on
   first use. picotool is built once and cached in `~/.cache/fw2emu/picotool`.
-- WiliBSP's nested `onewili` submodule:
-  `git -C third_party/wilibsp submodule update --init --depth 1 libs/onewili`.
+- WiliBSP's nested `onewili` submodule. `git clone --recurse-submodules`
+  already fetches it; otherwise run `git submodule update --init --recursive`.
 
 The build runs the same post-link checks as WiliBSP (`make_app_uf2.py`,
 `check_app_uf2.py`, and an app's own `POST_BUILD` checks such as
@@ -171,6 +180,19 @@ The command exits with status 1 if any of the following is true:
   RAM (the installer rejects both);
 - the stack does not fit (see below);
 - a build step or post-link check fails.
+
+### Known upstream issues
+
+A few of WiliBSP's own example apps fail these checks for reasons that are
+WiliBSP's, not the app's or the emulator's (the list and the reasons are in
+[App compatibility](compatibility.md#known-upstream-issues)). `hwcheck`
+shows them as `KNOWN (upstream)`, prints the reason and a link, and doesn't
+count them toward the exit status, so `tools/fw2emu hwcheck` on a fresh
+clone exits 0. They are matched by app and kind of failure, and only for
+WiliBSP's examples: any other failure of those apps, and every failure of
+your own apps, is an error. `--strict` counts the known ones too. If a
+listed issue stops happening, `hwcheck` warns (a warning annotation in
+GitHub Actions) so the list gets updated.
 
 `--exclude APP` skips an app, by folder or target name.
 

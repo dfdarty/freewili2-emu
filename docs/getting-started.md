@@ -16,7 +16,9 @@ and pick an app, with sliders for the sensors and the sound in the room.
 ## 2. GitHub Codespaces — a full dev environment in a browser tab
 
 The repository has a dev container with everything preinstalled: CMake,
-Ninja, SDL2, Python, Arm GCC and Emscripten.
+Ninja, SDL2, Python, Emscripten, the Pico SDK and Arm GCC. The Arm GCC is
+Ubuntu's 13.2; `tools/fw2emu hwcheck --fetch-toolchain` fetches the Arm GNU
+Toolchain 14.2.Rel1 that WiliBSP builds with, for exact numbers.
 
 1. On the [repository page](https://github.com/dfdarty/freewili2-emu), choose
    **Code → Codespaces → Create codespace on main**.
@@ -27,15 +29,15 @@ Ninja, SDL2, Python, Arm GCC and Emscripten.
     tools/fw2emu web third_party/wilibsp/apps/hello_display    # then open the forwarded port
     ```
 
-A Codespace has no display, so `fw2emu run` runs headless there (take
-screenshots with `--shot-on-exit` or a [script](scripting.md)), and `fw2emu
-web` gives you the interactive version on a forwarded port. The same container works locally in VS
+A Codespace has no display, so the emulator runs headless there and says
+so; take screenshots with `--shot-on-exit` or a [script](scripting.md).
+`fw2emu web` gives you the interactive version on a forwarded port. The same container works locally in VS
 Code with the Dev Containers extension.
 
 ## 3. Native on Linux
 
 ```sh
-sudo apt install git cmake ninja-build libsdl2-dev python3
+sudo apt install git cmake ninja-build libsdl2-dev zlib1g-dev python3
 git clone --recurse-submodules https://github.com/dfdarty/freewili2-emu
 cd freewili2-emu
 cmake -S . -B build -G Ninja
@@ -46,6 +48,15 @@ tests/smoke.sh                   # runs every app headless; screenshots and logs
 
 Every app in the build ends up in `build/bin/`. Run one with `--help` to see
 the [emulator's options](cli.md).
+
+- `--recurse-submodules` fetches WiliBSP and its own nested `libs/onewili`
+  (the OneWili client), which the build needs. In a clone made without it,
+  run `git submodule update --init --recursive`.
+- `zlib1g-dev` is optional: with it, screenshots are compressed PNGs.
+- **No display** (SSH, a container, WSL without WSLg): the emulator notices
+  that neither `DISPLAY` nor `WAYLAND_DISPLAY` is set, prints `no display …
+  running headless`, and runs without a window. Use `--run-ms`, `--script`
+  or `--rtt` to work with it, or ++ctrl+c++ to stop it.
 
 To build and run a single app folder — including one outside the repository —
 use the helper:
@@ -62,7 +73,17 @@ tools/fw2emu run path/to/my_app --headless --script test.txt # emulator flags go
 
 ## The browser build yourself
 
-With [Emscripten](https://emscripten.org) 4.0.15 installed:
+The browser build needs [Emscripten](https://emscripten.org) 4.0.15. Install
+it once with emsdk:
+
+```sh
+git clone https://github.com/emscripten-core/emsdk.git ~/emsdk
+~/emsdk/emsdk install 4.0.15
+~/emsdk/emsdk activate 4.0.15
+source ~/emsdk/emsdk_env.sh      # in every new shell (or add it to ~/.bashrc)
+```
+
+Then build one app and serve it:
 
 ```sh
 tools/fw2emu web path/to/my_app              # builds and serves on http://127.0.0.1:8080
@@ -76,7 +97,22 @@ cmake --build build-web
 python3 -m http.server -d build-web/bin 8080
 ```
 
-Or with Docker, which fetches Emscripten, WiliBSP and SDL at pinned versions:
+**The first build downloads SDL2.** Emscripten fetches its SDL2 port
+(`github.com/libsdl-org/SDL/archive/release-2.32.8.zip`) the first time and
+caches it. On a network that blocks that download (the build fails with
+`HTTP Error 403` in `retrieving port: sdl2`), point Emscripten at a local
+SDL checkout of the same release instead:
+
+```sh
+git clone --depth 1 --branch release-2.32.8 https://github.com/libsdl-org/SDL.git ~/SDL
+export EMCC_LOCAL_PORTS=sdl2=$HOME/SDL
+```
+
+Keep it exported for every later build too (put it in `~/.bashrc` next to
+`emsdk_env.sh`); without it Emscripten tries the download again. The dev
+container and the Dockerfile already set it.
+
+Or use Docker, which fetches Emscripten, WiliBSP and SDL at pinned versions:
 
 ```sh
 docker build -t freewili2-emu .

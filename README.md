@@ -21,17 +21,36 @@ browser.
 ## Quick start
 
 ```sh
-sudo apt install git cmake ninja-build libsdl2-dev python3
+sudo apt install git cmake ninja-build libsdl2-dev zlib1g-dev python3
 git clone --recurse-submodules https://github.com/dfdarty/freewili2-emu
 cd freewili2-emu
 cmake -S . -B build -G Ninja && cmake --build build
 build/bin/hello_display                 # a WiliBSP example app, in a window
-tools/fw2emu run path/to/your_app       # build and run your own app folder
-tools/fw2emu hwcheck path/to/your_app   # check it fits the real chip
 ```
 
-Or open the repository in **GitHub Codespaces** for a ready-made environment.
-See [Install and run](https://dfdarty.github.io/freewili2-emu/getting-started/).
+Your own app, from folder to hardware check:
+
+```sh
+cp -r third_party/wilibsp/apps/template apps/my_app && sed -i 's/\btemplate\b/my_app/g' apps/my_app/CMakeLists.txt
+tools/fw2emu run apps/my_app                                           # build and run it
+tools/fw2emu run apps/my_app --headless --script apps/my_app/test.txt  # test it (script with `expect` lines)
+tools/fw2emu hwcheck apps/my_app                                       # check it fits the real chip
+```
+
+The [first-app tutorial](https://dfdarty.github.io/freewili2-emu/first-app/)
+writes `test.txt`. No display (SSH, a container)? The emulator notices and
+runs headless; `--headless` says so explicitly.
+
+- `hwcheck` needs Arm GCC: `--fetch-toolchain` downloads the Arm GNU
+  Toolchain 14.2.Rel1 that WiliBSP uses, or install the distribution's
+  `gcc-arm-none-eabi`.
+- The browser build needs Emscripten 4.0.15 (emsdk), or use the Dockerfile:
+  `docker build -t freewili2-emu .`
+
+It can't run `.uf2` files (apps are rebuilt from source), and it doesn't model
+radios, USB host, DVI output or real-time performance — check those on the
+board. Or open the repository in **GitHub Codespaces** for a ready-made
+environment. See [Install and run](https://dfdarty.github.io/freewili2-emu/getting-started/).
 
 ## What's in it
 
@@ -41,7 +60,8 @@ See [Install and run](https://dfdarty.github.io/freewili2-emu/getting-started/).
   WiliBSP's drivers run as shipped.
 - 12 of WiliBSP's 17 example apps run, including the SD card, header GPIO
   and VIO apps over the MAIN processor link (OneWili); radios are next. [Details](https://dfdarty.github.io/freewili2-emu/compatibility/).
-- WiliBSP's `fw.py press / touch / type / screenshot` work against it over RTT.
+- WiliBSP's `fw.py press / touch / type / screenshot` work against it over RTT,
+  for apps that call `agentio_init()` (as on the board).
 - `fw2emu hwcheck` builds your app with the real Pico SDK and Arm GCC and
   reports SRAM, PSRAM and worst-case stack against the RP2350's limits.
 - Sanitizer and 32-bit builds to catch memory and pointer-size bugs before
