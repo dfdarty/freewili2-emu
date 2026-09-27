@@ -39,8 +39,8 @@ See [Install and run](https://dfdarty.github.io/freewili2-emu/getting-started/).
   codec with speaker and jack, four PDM microphones, power zones, charger
   status and 8 MB PSRAM — modelled at the bus and protocol level, so
   WiliBSP's drivers run as shipped.
-- 9 of WiliBSP's 17 example apps run; radios, the SD card and the MAIN
-  processor link are next. [Details](https://dfdarty.github.io/freewili2-emu/compatibility/).
+- 12 of WiliBSP's 17 example apps run, including the SD card, header GPIO
+  and VIO apps over the MAIN processor link (OneWili); radios are next. [Details](https://dfdarty.github.io/freewili2-emu/compatibility/).
 - WiliBSP's `fw.py press / touch / type / screenshot` work against it over RTT.
 - `fw2emu hwcheck` builds your app with the real Pico SDK and Arm GCC and
   reports SRAM, PSRAM and worst-case stack against the RP2350's limits.

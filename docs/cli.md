@@ -17,8 +17,9 @@ same options:
 | `--audio-out WAV` | record everything the codec plays |
 | `--mic-wav WAV` | sound reaching the microphones, looped |
 | `--mute` | don't play audio through the PC |
-| `--sensor NAME=V[,V...]` | set a sensor or the room sound at start-up, e.g. `temp=24`, `tilt=30,0`, `tone=1000,8000`, `mics=1,1,0,1` (repeatable; names in [Sensors and sound](sensors-and-sound.md)) |
-| `-v`, `-vv` | log model activity: power commands, touches, IO expander, audio; `-vv` also logs every sleep |
+| `--sdcard DIR` | folder that stands in for the SD card in the MAIN CPU's slot (default `./sdcard`, created with sample files on first use; `none` = no card) — see [The MAIN processor link](main-link.md) |
+| `--sensor NAME=V[,V...]` | set a sensor or the room sound at start-up, e.g. `temp=24`, `tilt=30,0`, `tone=1000,8000`, `mics=1,1,0,1` (repeatable; names in [Sensors and sound](sensors-and-sound.md)); also header inputs, e.g. `gpio12=1`, and `vrefext=3.3` ([MAIN link](main-link.md#header-gpio-and-vio)) |
+| `-v`, `-vv` | log model activity: power commands, touches, IO expander, audio, OneWili replies; `-vv` also logs every sleep and SD request |
 
 In the browser, pass the same options in the URL: `?app=hello_audio&args=-v`.
 
@@ -73,6 +74,7 @@ For building with CMake directly (`cmake -S . -B build -G Ninja -D...`):
 |---|---|---|
 | `FW2_EMU_UPSTREAM_APPS` | the WiliBSP apps that run | which WiliBSP example apps to build |
 | `FW2_EMU_LOCAL_APPS` | `ON` | build every folder in `apps/` |
+| `FW2_EMU_TEST_APPS` | `ON` natively, `OFF` on the web | build the self-test apps in `tests/apps/` |
 | `FW2_EMU_EXTRA_APPS` | empty | extra app folders, absolute paths, `;`-separated |
 | `FW2_EMU_SANITIZE` | `OFF` | AddressSanitizer + UBSan (native only) |
 | `FW2_EMU_32BIT` | `OFF` | `-m32` build (native only) |
@@ -88,6 +90,8 @@ BUILD_DIR=build-asan CMAKE_ARGS="-DFW2_EMU_SANITIZE=ON" tests/smoke.sh
 ```
 
 Builds, then runs every app that has a script in `tests/scripts/<app>.txt`
-headless. Screenshots, logs and audio land in `out/`. If
-`tests/scripts/<app>.expect` exists, each line is a regular expression the
-app's log must match.
+headless, each with a fresh SD card folder (`out/sdcard-<app>`).
+Screenshots, logs and audio land in `out/`. If `tests/scripts/<app>.expect`
+exists, each line is a regular expression the app's log must match; a line
+starting with `!` must not match, and `@sd PATH REGEX` checks a file the app
+left on its SD card.

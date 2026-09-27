@@ -53,6 +53,7 @@ nav:
       - Command line: cli.md
       - Input scripts: scripting.md
       - Sensors and sound: sensors-and-sound.md
+      - The MAIN processor link: main-link.md
       - WiliBSP's agent tools: wilibsp-tools.md
   - Trusting the results:
       - Debugging and hardware checks: debugging.md

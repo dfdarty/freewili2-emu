@@ -14,6 +14,7 @@ One command per line; `#` starts a comment.
 | `set NAME V [V V V]` | change a sensor or the room sound (table below) |
 | `screenshot FILE [lcd\|device]` | PNG of the 480x320 LCD, or the whole front panel |
 | `log TEXT` | print a marker |
+| `header` | log the MAIN CPU's GPIO header: each pin's level, VIO and Vout ([MAIN link](main-link.md#header-gpio-and-vio)) |
 | `quit` | end the run |
 
 Buttons: `GREY YELLOW GREEN BLUE RED CENTER UP DOWN LEFT RIGHT HOME OK CANCEL PAGE`.
@@ -34,6 +35,8 @@ Buttons: `GREY YELLOW GREEN BLUE RED CENTER UP DOWN LEFT RIGHT HOME OK CANCEL PA
 | `miclevel` | gain | scale for the `--mic-wav` source |
 | `mics` | A B C D | per-mic pickup gain, 0–1 (physical order left to right is D B A C) |
 | `mic.A` … `mic.D` | gain | one mic's pickup gain |
+| `gpio8` … `gpio17`, `gpio25` … `gpio27` | 1 / 0 / -1 | drive a MAIN-CPU header pin high or low from outside; -1 stops driving it |
+| `vrefext` | V | volts on the Trig_IN/VREF pin (used by `VREF_EXT_PIN`); -1 = nothing connected |
 
 The codec ADC and all four PDM mics hear the same room: the `--mic-wav`
 source, the tone, and some of whatever the speaker is playing.

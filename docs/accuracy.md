@@ -17,6 +17,8 @@ attaches a model to each bus, register block or wire protocol:
 | FT6336U touch on I2C1 | `dev_touch.c` | register file, point latches, chip-to-screen orientation; taps are held until the app has read them |
 | WS2812 × 16 on pio1 | `dev_leds.c` | GRB words from the PIO state machine, latch timing; RGB_LEDS power zone |
 | PCAL6524 IO expander | `dev_ioexp.c` | output ports and pin directions: VREF select, antenna switch, mic/IR/USB power |
+| MAIN CPU on UART0 (FwGUI link) | `dev_main.c` | the 8 Mbaud link byte for byte: OneWili console commands and replies, the SDFS SD-card protocol over a host folder, header GPIO, programmable Vout, `EPOWERZONE` ([details](main-link.md)) |
+| Display ADC (VIO / Vout monitors) | `sdk_periph.c`, `dev_main.c` | 12-bit conversions of the header rails through the 2:1 dividers, at levels measured on hardware |
 | Board-manager PIC on UART1 | `dev_pic.c` | the 62 500-baud link byte for byte: 23-byte status frames (14 buttons, charger, rails); break → `0xC9` → 11-byte power command; ~1 s rail walk |
 | SHT40, OPT4001, BMI323, BMM350 on I2C1 | `dev_sensors.c` | each part's command/register protocol, CRCs, ranges and encodings; SENSORS power zone |
 | NAU88C10 codec + I2S on pio0 | `dev_audio.c` | register file with reset defaults; DAC mute/volume, speaker vs. jack routing and gain; ADC input. I2S runs at `clk_sys / clkdiv / 128` through DREQ-paced DMA |
@@ -36,6 +38,10 @@ attaches a model to each bus, register block or wire protocol:
 - **Sensor ranges.** Readings saturate at the range the driver configured.
 - **Memory map.** PSRAM is at its real address, so pointer arithmetic and
   `fw2_psram_app()` images behave as on the chip.
+- **The MAIN link.** The OneWili client runs unmodified against a MAIN CPU
+  that speaks its wire protocol, with 8 Mbaud pacing, flow control and
+  MAIN's 2 KB receive ring. A too-large SD write fails here as it does on
+  the board ([why](main-link.md#link-timing)).
 
 ## Approximate
 
@@ -51,11 +57,17 @@ attaches a model to each bus, register block or wire protocol:
   model or temperature drift.
 - **LED output** shows the colour data the app sends; the real LEDs'
   brightness and first-frame latch quirk are not modelled.
+- **The MAIN CPU's** response times and SD-card busy periods are estimates.
+  The MAIN firmware isn't public, so a few replies are inferred;
+  [the MAIN link page](main-link.md#wire-protocol) marks which. The SD card
+  is a folder on your PC, so FAT's limits don't apply.
 
 ## Not modelled yet
 
-- The MAIN processor and the OneWili link (and through it: SD card, header
-  GPIO, analog, CAN, radios other than the CC1101).
+- Most of what the MAIN processor does beyond the SD card, header GPIO and
+  Vout: CAN, analog inputs, the UART/I2C/SPI bridges, the FPGA, and radios
+  other than the CC1101. Those OneWili commands return a failure instead of
+  hanging.
 - CC1101 sub-GHz radio, LoRa, NFC, infrared.
 - USB host, DVI output (stubbed), the second core.
 

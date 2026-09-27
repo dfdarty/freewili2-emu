@@ -3,16 +3,16 @@
 ## Building
 
 **`third_party/wilibsp` is empty / "does not contain a CMakeLists.txt".**
-The WiliBSP submodule wasn't fetched:
+The WiliBSP submodule, or its own nested `libs/onewili`, wasn't fetched:
 
 ```sh
-git submodule update --init --depth 1
+git submodule update --init --recursive --depth 1
 ```
 
-`hwcheck` also needs WiliBSP's own nested submodule:
-`git -C third_party/wilibsp submodule update --init --depth 1 libs/onewili`.
+**"WiliBSP's nested libs/onewili submodule is missing".** The same fix: the
+OneWili client (the MAIN-CPU link) is a submodule inside WiliBSP.
 
-**CMake is too old.** The project needs CMake 3.18 or newer.
+**CMake is too old.** The project needs CMake 3.20 or newer.
 
 **`SDL2` not found.** Install `libsdl2-dev`, or configure with
 `-DFW2_EMU_SDL=OFF` for a headless-only build.

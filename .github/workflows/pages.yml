@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true
+          submodules: recursive     # WiliBSP's nested libs/onewili (the MAIN-CPU link)
       - name: Install build tools
         run: |
           sudo apt-get update

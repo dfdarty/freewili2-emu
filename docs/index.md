@@ -44,9 +44,9 @@ app, build it with the emulator — see [Your first app](first-app.md).
 The display, touch screen, all 14 buttons, the 16 RGB LEDs, the four
 on-board sensors (temperature/humidity, light, IMU, magnetometer), the audio
 codec with speaker and headphone jack, the four PDM microphones, the power
-zones and charger status from the board-manager chip, and 8 MB of PSRAM.
-Radios, the SD card and the link to the MAIN processor are not modelled yet —
-see [App compatibility](compatibility.md) for exactly which WiliBSP apps
+zones and charger status from the board-manager chip, 8 MB of PSRAM, and
+the link to the MAIN processor with its SD card, header GPIO and Vout.
+Radios are not modelled yet — see [App compatibility](compatibility.md) for exactly which WiliBSP apps
 run, and [Accuracy](accuracy.md) for how closely each part follows the real
 hardware.
 
