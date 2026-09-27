@@ -37,6 +37,9 @@ The browser version adds a guide beside the device and a row of panels under it 
 - **App picker** and **Restart** at the top. `?app=NAME` in the URL picks an
   app; `?args=...` passes [command-line flags](cli.md), for example
   `?app=hello_audio&args=-v`.
+- **● Record** next to Restart records what you do, on the device and in the
+  panels, and downloads it as an [input script](scripting.md#recording-a-script)
+  when you press it again.
 - **About this app:** for each WiliBSP example, what it tests, what you're
   seeing, and things to try. The ▶ buttons do them for you (tilt the device,
   play a tone into one microphone, type with the chord keyboard, …) by moving

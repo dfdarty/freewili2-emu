@@ -89,6 +89,7 @@
   body.nohints .hint { display: none; }
   .card.focus { border-color: var(--accent); }
   .card h2 .tag { float: right; color: var(--accent); text-transform: none; letter-spacing: 0; font-weight: normal; }
+  #record.on { border-color: #e5484d; color: #ff8589; }
   header a.docs { text-decoration: none; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
 </style>
 </head>
@@ -97,6 +98,7 @@
   <h1>FREE-WILi 2 <span>emulator</span></h1>
   <label>app <select id="app"></select></label>
   <button id="restart" type="button">Restart</button>
+  <button id="record" type="button" title="Record what you do on the device (buttons, touches, the panels) as a test script you can download">● Record</button>
   <span id="desc"></span>
   <a class="docs" href="https://dfdarty.github.io/freewili2-emu/" target="_blank" rel="noopener">Docs</a>
 </header>
@@ -235,6 +237,38 @@
   // ---- sensor sliders -> emulator commands (script syntax, see docs/scripting.md)
   Module.fw2Commands = [];
   const send = cmd => Module.fw2Commands.push(cmd);
+  // ---- Record: what the person does -> an input script to download
+  const recBtn = document.getElementById('record');
+  const REC_PATH = '/recording.txt';
+  let recording = false;
+  recBtn.addEventListener('click', () => {
+    if (!recording) {
+      try { Module.FS.unlink(REC_PATH); } catch (e) { /* none yet */ }
+      send(`record ${REC_PATH}`);
+      recording = true;
+      recBtn.classList.add('on');
+      recBtn.textContent = '■ Stop & download';
+      return;
+    }
+    send('record stop');
+    recording = false;
+    recBtn.classList.remove('on');
+    recBtn.textContent = '● Record';
+    const t0 = Date.now();
+    const poll = setInterval(() => {
+      let text = null;
+      try { text = Module.FS.readFile(REC_PATH, { encoding: 'utf8' }); } catch (e) { /* not written yet */ }
+      if (text === null && Date.now() - t0 < 5000) return;
+      clearInterval(poll);
+      if (text === null) { log('[emu] record: no script was written'); return; }
+      const name = `${document.getElementById('app').value || 'app'}-test.txt`;
+      const a = Object.assign(document.createElement('a'), {
+        href: URL.createObjectURL(new Blob([text], { type: 'text/plain' })), download: name });
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      log(`[emu] record: downloaded ${name}`);
+    }, 100);
+  });
   document.getElementById('play-launch').addEventListener('click', () => send('play @launch'));
   document.getElementById('play-stop').addEventListener('click', () => send('play stop'));
   document.getElementById('play-file').addEventListener('change', async ev => {

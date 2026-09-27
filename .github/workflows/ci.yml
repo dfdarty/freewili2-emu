@@ -19,9 +19,11 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends cmake ninja-build libsdl2-dev zlib1g-dev python3
+          sudo apt-get install -y --no-install-recommends cmake ninja-build libsdl2-dev zlib1g-dev python3 xvfb xdotool
       - name: Build and run every app headless
         run: tests/smoke.sh
+      - name: Record a session in a real window and replay it (--record)
+        run: tests/record.sh
       - name: Upload screenshots and logs
         if: always()
         uses: actions/upload-artifact@v7

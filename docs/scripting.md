@@ -90,3 +90,46 @@ double quotes if it contains spaces; `\"` is a quote inside it.
 
 It works the same natively, in the sanitizer and 32-bit builds, and in
 WebAssembly under Node.
+
+## Recording a script
+
+Instead of writing a script by hand, use the app and let the emulator write
+it:
+
+```sh
+tools/fw2emu run apps/my_app --record apps/my_app/test.txt
+```
+
+Everything you do is recorded with its timing: keys and clicks on the
+panel's buttons, taps and swipes on the screen, and screenshots (++f2++).
+Close the window (or press ++ctrl+c++) and the script is written. In the
+browser, **● Record** next to *Restart* does the same, including what you do
+in the panels (sensor sliders, header pins, sensor logs), and downloads the
+script when you stop.
+
+```text
+# Recorded by the FREE-WILi 2 emulator (--record) ..., app my_app.
+wait 4928
+press OK 404
+# expect "count=1"
+wait 972
+press OK 180
+# expect "count=2"
+wait 1004
+quit
+```
+
+It replays what you did with the same timing: times count from the
+emulator's start, as a script's do, so a recording started later still
+waits for the app to boot. After each step, the lines the app logged in
+response appear as `# expect` comments, with long numbers (times,
+readings) loosened to `[0-9]+`. Uncomment the ones that matter and the
+recording becomes a pass/fail test:
+
+```sh
+tools/fw2emu test apps/my_app
+```
+
+A slider dragged in the browser is recorded where it stopped, and an app
+that logs the same status line over and over shows it once.
+

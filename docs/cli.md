@@ -17,6 +17,7 @@ same options:
 | `--audio-out WAV` | record everything the codec plays |
 | `--mic-wav WAV` | sound reaching the microphones, looped |
 | `--mute` | don't play audio through the PC |
+| `--record FILE` | write what you do (keys, clicks, touches, F2 screenshots) as an [input script](scripting.md#recording-a-script) when the run ends, with the app's log lines as `# expect` hints |
 | `--sensor-csv FILE` | play a time-stamped sensor log from the start of the run: a CSV, or `@launch` for the built-in rocket flight ([format](sensors-and-sound.md#playing-a-sensor-log)) |
 | `--board-id HEX16` | the chip's 64-bit unique id, as `pico_get_unique_board_id()` returns it (default `E6616408432A7B15`); give two emulators different ids when they talk to each other |
 | `--perf` | log bus load and LCD throughput once a second (`perf: SPI1 62.5 MHz 41%  I2C1 400 kHz 2%  LCD 10.4 screens/s`); the same line is always on the device's bottom edge — see [bus timing](debugging.md#is-it-fast-enough-bus-timing) |

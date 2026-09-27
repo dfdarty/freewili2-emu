@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <signal.h>
 
 #ifndef FW2EMU_HEADLESS_ONLY
 #include <SDL.h>
@@ -171,6 +172,7 @@ static uint16_t s_mouse_btns;
 static void touch_down(int lx, int ly) {
     s_mouse_touch = true;
     emu_touch_set(lx, ly, true);
+    emu_rec_touch(lx, ly, true);
 }
 static void touch_up(void) {
     if (!s_mouse_touch) return;
@@ -178,6 +180,7 @@ static void touch_up(void) {
     int x, y;
     emu_touch_get(&x, &y);
     emu_touch_set(x, y, false);
+    emu_rec_touch(x, y, false);
 }
 
 static int key_to_btn(SDL_Keycode k) {
@@ -202,6 +205,7 @@ static int key_to_btn(SDL_Keycode k) {
 
 static void push_buttons(void) {
     emu_pic_set_buttons((uint16_t)(s_key_btns | s_mouse_btns));
+    emu_rec_buttons((uint16_t)(s_key_btns | s_mouse_btns));
 }
 
 static void mouse_at(int wx, int wy, bool down) {
@@ -235,6 +239,7 @@ static void window_events(void) {
         case SDL_KEYDOWN:
         case SDL_KEYUP: {
             if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_F2) {
+                emu_rec_screenshot();
                 char name[64];
                 snprintf(name, sizeof name, "fw2emu-%llu.png", (unsigned long long)(emu_time_us() / 1000));
 #ifdef __EMSCRIPTEN__
@@ -262,8 +267,10 @@ static void window_events(void) {
         case SDL_MOUSEMOTION:
             if (s_mouse_touch) {
                 int lx, ly;
-                if (emu_skin_to_lcd(e.motion.x / s_scale, e.motion.y / s_scale, &lx, &ly))
+                if (emu_skin_to_lcd(e.motion.x / s_scale, e.motion.y / s_scale, &lx, &ly)) {
                     emu_touch_set(lx, ly, true);
+                    emu_rec_touch(lx, ly, true);
+                }
             }
             break;
         default:
@@ -376,7 +383,20 @@ static void perf_task(uint64_t now_us) {
 /* ------------------------------------------------------------ poll/yield */
 bool emu_in_service(void) { return s_in_poll; }
 
+#ifndef __EMSCRIPTEN__
+static volatile sig_atomic_t s_signal;
+/* First Ctrl+C: finish at the next emulator call, so atexit handlers write
+ * the recording and the audio file. A second one kills at once. */
+static void on_signal(int sig) {
+    s_signal = sig;
+    signal(sig, SIG_DFL);
+}
+#endif
+
 void emu_poll(void) {
+#ifndef __EMSCRIPTEN__
+    if (s_signal) { fputs("\n", stderr); emu_log("stopped (%s)", s_signal == SIGINT ? "Ctrl+C" : "signal"); exit(130); }
+#endif
     if (s_in_poll) return;
     emu_core_tick();                                   /* may run core 1 for a while */
     s_in_poll = true;
@@ -526,6 +546,7 @@ static void usage(void) {
         "  --mute              don't play audio through the PC\n"
         "  --board-id HEX16    the RP2350's 64-bit unique id (default E6616408432A7B15)\n"
         "  --sensor-csv FILE   play a sensor log (CSV, or @launch for the built-in rocket flight)\n"
+        "  --record FILE       write what you do (keys, clicks, touches) as an input script\n"
         "  --perf              log bus load and LCD throughput once a second\n"
         "  --instant-bus       SPI/I2C transfers take no time (to compare against the old, untimed model)\n"
         "  --sdcard DIR        folder that stands in for the SD card (default ./sdcard; 'none' = no card)\n"
@@ -547,6 +568,7 @@ int main(int argc, char **argv) {
     const char *script = NULL;
     const char *sdcard = NULL;
     const char *sensor_csv = NULL;
+    const char *record = NULL;
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
@@ -564,6 +586,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--mic-wav") && i + 1 < argc) emu_audio_set_mic_wav(argv[++i]);
         else if (!strcmp(a, "--mute")) s_mute = true;
         else if (!strcmp(a, "--perf")) s_perf_log = true;
+        else if (!strcmp(a, "--record") && i + 1 < argc) record = argv[++i];
         else if (!strcmp(a, "--sensor-csv") && i + 1 < argc) sensor_csv = argv[++i];
         else if (!strcmp(a, "--board-id") && i + 1 < argc) {
             if (!emu_set_board_id(argv[++i])) { fprintf(stderr, "bad --board-id %s (16 hex digits)\n", argv[i]); return 2; }
@@ -610,10 +633,16 @@ int main(int argc, char **argv) {
     emu_rtt_init(s_rtt_tcp);
 
     atexit(emu_audio_finish);
+    atexit(emu_rec_stop);                        /* however the run ends */
+#ifndef __EMSCRIPTEN__
+    signal(SIGINT, on_signal);                   /* Ctrl+C: end cleanly (recording, audio) */
+    signal(SIGTERM, on_signal);
+#endif
     s_skin = (uint32_t *)calloc((size_t)EMU_SKIN_W * EMU_SKIN_H, sizeof(uint32_t));
     if (!s_headless) window_open();              /* may fall back to headless */
     emu_audio_enable_host(!s_headless && !s_mute);
     if (script) emu_script_load(script);
+    if (record) emu_rec_start(record);
     if (sensor_csv) {
         const char *err = emu_sensor_play(sensor_csv, false, false);
         if (err) { fprintf(stderr, "--sensor-csv %s\n", err); return 2; }

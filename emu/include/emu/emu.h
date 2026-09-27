@@ -208,6 +208,16 @@ float emu_main_vio(void);                           /* header VIO rail, volts */
 float emu_main_vout(void);                          /* programmable Vout, volts */
 bool  emu_main_sd_active(void);                     /* SD request in the last ~150 ms */
 
+/* Recording a person's input as a script (record.c) */
+void emu_rec_start(const char *path);
+void emu_rec_stop(void);                            /* writes the script */
+bool emu_rec_active(void);
+void emu_rec_buttons(uint16_t mask);                /* buttons a person holds */
+void emu_rec_touch(int x, int y, bool down);        /* a person's touch: down, moves, up */
+void emu_rec_command(const char *line);             /* a command from the web page */
+void emu_rec_screenshot(void);                      /* F2 */
+void emu_rec_log_line(const char *line);            /* every log line (for expect hints) */
+
 /* SEGGER RTT back end */
 void emu_rtt_init(bool tcp);
 void emu_rtt_task(void);

@@ -140,7 +140,12 @@ follow any command. `out/my_app.png` is the whole front panel, LEDs
 included; `out/` is created if needed. [Input scripts](scripting.md) has
 every command, including touches and sensor changes.
 
-`tools/fw2emu test apps/my_app` does the same in one step and says PASS or
+Rather than writing it by hand, you can
+[record it](scripting.md#recording-a-script): `tools/fw2emu run apps/my_app
+--record apps/my_app/test.txt`, use the app, close the window, and
+uncomment the `# expect` lines you want checked.
+
+`tools/fw2emu test apps/my_app` runs the test in one step and says PASS or
 FAIL. `tests/smoke.sh` also runs `apps/<app>/test.txt` for every app in
 `apps/`, so your test runs with WiliBSP's examples. To run it on every push
 of your own repository, use the [GitHub Action](ci.md).

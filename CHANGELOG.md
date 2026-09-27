@@ -6,6 +6,21 @@ change that would break a v1 workflow gets a new major version.
 
 ## [Unreleased]
 
+### Added
+- Record a session as an input script: `--record FILE`, or **● Record** in
+  the browser. The app's log lines after each step come along as
+  `# expect` hints.
+- `tools/fw2emu new DIR [--repo]` and `examples/app-template`: a new app with
+  its test (and, with `--repo`, a README and a workflow that tests every
+  push).
+- A weekly workflow that moves WiliBSP to its latest commit, runs every test
+  and the hardware check, and opens a pull request with the results.
+- Issue and pull-request templates, and this changelog.
+
+### Changed
+- Ctrl+C ends a run cleanly: a recording or `--audio-out` file is still
+  written.
+
 ## [1.0.0] — 2026-09-27
 
 The first release.

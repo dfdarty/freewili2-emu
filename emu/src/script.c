@@ -58,6 +58,7 @@ static struct {
 } s_expect;
 
 void emu_script_line(const char *line) {
+    emu_rec_log_line(line);
     snprintf(s_out[s_out_count % NLINES], LINE_MAX_LEN, "%s", line);
     s_out_count++;
 }
@@ -302,11 +303,19 @@ bool emu_script_exec_line(const char *line) {
     while (*p == ' ') p++;
     strip_comment(p);
     if (!*p || !strncmp(p, "wait", 4) || !strncmp(p, "quit", 4)) return false;
+    if (!strncmp(p, "record ", 7)) {                    /* the page's Record button */
+        const char *arg = p + 7;
+        while (*arg == ' ') arg++;
+        if (!strcmp(arg, "stop")) emu_rec_stop();
+        else emu_rec_start(arg);
+        return true;
+    }
     static const char *const ok[] = { "press", "hold", "release", "touch", "drag", "set", "log", "screenshot", "header", "play" };
     bool known = false;
     for (size_t i = 0; i < sizeof ok / sizeof ok[0]; i++)
         if (!strncmp(p, ok[i], strlen(ok[i]))) known = true;
     if (!known) return false;
+    emu_rec_command(p);
     s_from_web = true;
     exec(p, emu_time_us());
     s_from_web = false;
