@@ -113,7 +113,7 @@ does not overlap ASan's shadow memory on x86-64 or i386.
 ## 32-bit build: `FW2_EMU_32BIT`
 
 ```sh
-sudo apt install gcc-multilib
+sudo apt install gcc-multilib g++-multilib     # g++ for the C++ apps
 BUILD_DIR=build-m32 CMAKE_ARGS="-DFW2_EMU_32BIT=ON" tests/smoke.sh
 ```
 

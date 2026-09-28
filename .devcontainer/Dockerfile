@@ -9,7 +9,7 @@ ARG PICO_SDK_VERSION=2.3.0
 
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      build-essential cmake ninja-build gdb gcc-multilib python3 git ca-certificates xz-utils \
+      build-essential cmake ninja-build gdb gcc-multilib g++-multilib python3 git ca-certificates xz-utils \
       libsdl2-dev zlib1g-dev \
       gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib \
  && rm -rf /var/lib/apt/lists/*

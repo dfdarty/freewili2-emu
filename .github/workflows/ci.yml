@@ -74,7 +74,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends cmake ninja-build gcc-multilib python3
+          sudo apt-get install -y --no-install-recommends cmake ninja-build gcc-multilib g++-multilib python3
       - name: Build with FW2_EMU_32BIT and run every app headless
         run: tests/smoke.sh
         env:
