@@ -48,7 +48,7 @@ them stops happening, hwcheck warns so the list can be updated.
 | App | Failure | Reason |
 |---|---|---|
 | `hello_psram_exec` | post-link layout check | WiliBSP's `bsp/app/psram_link` selects the SDK objects for the SRAM bootstrap as `*.c.obj`, the Windows object naming. With `*.c.o` (Linux, macOS) the clock and QMI code lands in PSRAM, and the app's own `verify_layout.py` rejects the image. |
-| `toggleled`, `hello_vref` | stack (~10.9 KB) | Every generated OneWili text command keeps its buffers on the stack: 5 KB in the call plus 5 KB in `ow__call`. That is more than the RP2350's two 4 KB scratch banks together. The SD calls don't have this problem; see [the MAIN link page](main-link.md#checking-it). |
+| `toggleled`, `hello_vref`, `canblast`, `dualcpu` | stack (~10.9–11.8 KB) | Every generated OneWili text command keeps its buffers on the stack: 5 KB in the call plus 5 KB in `ow__call`. In `dualcpu` it's `ow_stream_drops`, which asks MAIN with `h\a\c`. That is more than the RP2350's two 4 KB scratch banks together. The SD calls don't have this problem; see [the MAIN link page](main-link.md#checking-it). |
 
 ## Planned order
 

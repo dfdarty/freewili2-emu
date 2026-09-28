@@ -201,7 +201,7 @@ jobs:
         run: |
           mkdir -p "$ACTION_PATH"
           bash tools/action-setup.sh
-          test -f "$RUNNER_TEMP/freewili2-emu/third_party/wilibsp/libs/onewili/CMakeLists.txt"
+          test -f "$RUNNER_TEMP/freewili2-emu/third_party/wilibsp/libs/onewili/wilibsp/CMakeLists.txt"
 
   web:
     name: web build (Emscripten 4.0.15)

@@ -10,7 +10,7 @@
 set -euo pipefail
 
 if [ -f "$ACTION_PATH/third_party/wilibsp/bsp/fw2.h" ] &&
-   [ -f "$ACTION_PATH/third_party/wilibsp/libs/onewili/CMakeLists.txt" ]; then
+   [ -f "$ACTION_PATH/third_party/wilibsp/libs/onewili/wilibsp/CMakeLists.txt" ]; then
     root="$ACTION_PATH"        # `uses: ./` in a checkout with submodules
 else
     repo=${ACTION_REPO:-}
