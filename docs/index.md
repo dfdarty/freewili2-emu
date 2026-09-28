@@ -51,9 +51,11 @@ The display, touch screen, all 14 buttons, the 16 RGB LEDs, the four
 on-board sensors (temperature/humidity, light, IMU, magnetometer), the audio
 codec with speaker and headphone jack, the four PDM microphones, the power
 zones and charger status from the board-manager chip, 8 MB of PSRAM, and
-the link to the MAIN processor with its SD card, header GPIO and Vout.
-Radios are not modelled yet — see [App compatibility](compatibility.md) for exactly which WiliBSP apps
-run, and [Accuracy](accuracy.md) for how closely each part follows the real
+the link to the MAIN processor with its SD card, header GPIO and Vout. The
+radios are stand-ins: the stock Wi-Fi and Bluetooth scans report a scene of
+virtual networks, and [peer streams](main-link.md#peer-streams-esp32-cm0-pc)
+reach a stand-in ESP32, CM0 or PC. See [App compatibility](compatibility.md)
+for exactly which WiliBSP apps run, and [Accuracy](accuracy.md) for how closely each part follows the real
 hardware.
 
 ## How it works

@@ -1,10 +1,10 @@
 # App compatibility
 
-WiliBSP ships 17 example apps. They are the best measure of how much of the
+WiliBSP ships 19 example apps. They are the best measure of how much of the
 board the emulator covers: each one below either runs unmodified, or is
 blocked by a part that isn't modelled yet.
 
-**13 of 17 run.** On every push, CI runs each of them headless with its
+**14 of 19 run.** On every push, CI runs each of them headless with its
 script in `tests/scripts/` (natively, with sanitizers and as a 32-bit build),
 and builds all of them for the board with
 [`fw2emu hwcheck`](debugging.md#real-hardware-check-toolsfw2emu-hwcheck)
@@ -28,6 +28,8 @@ there.
 | `toggleled` | ✅ runs | header GPIO 25 toggled over OneWili, VIO select ² |
 | `hello_vref` | ✅ runs | VIO select measured on the display ADC, GPIO read-back over OneWili ² |
 | `retrochat` | ✅ runs | the [second core](accuracy.md#the-second-core) (its modem decoder), speaker → air → microphones, `pico/unique_id.h`; the acoustic self-test decodes its own "HI" |
+| `dualcpu` | ✅ runs | the display half of a DISPLAY + ESP32 app over OneWili [peer streams](main-link.md#peer-streams-esp32-cm0-pc), against the emulator's stand-in for its ESP32 half (`--peer esp32=dualcpu`): PING/PONG, telemetry, LED, Wi-Fi scan ² |
+| `canblast` | ❌ | needs MAIN's CAN FD controller (`h\s\p\*`, `i\c\*`) and its `canRxReport` events; building it for the board also hits a [known upstream issue](#known-upstream-issues) |
 | `hello_ir` | ❌ | needs the infrared transmitter and receiver |
 | `hello_cc1101` | ❌ | needs the CC1101 sub-GHz radio |
 | `hello_usbdrive` | ❌ | needs USB host and a USB drive |
@@ -48,7 +50,7 @@ them stops happening, hwcheck warns so the list can be updated.
 | App | Failure | Reason |
 |---|---|---|
 | `hello_psram_exec` | post-link layout check | WiliBSP's `bsp/app/psram_link` selects the SDK objects for the SRAM bootstrap as `*.c.obj`, the Windows object naming. With `*.c.o` (Linux, macOS) the clock and QMI code lands in PSRAM, and the app's own `verify_layout.py` rejects the image. |
-| `toggleled`, `hello_vref`, `canblast`, `dualcpu` | stack (~10.9–11.8 KB) | Every generated OneWili text command keeps its buffers on the stack: 5 KB in the call plus 5 KB in `ow__call`. In `dualcpu` it's `ow_stream_drops`, which asks MAIN with `h\a\c`. That is more than the RP2350's two 4 KB scratch banks together. The SD calls don't have this problem; see [the MAIN link page](main-link.md#checking-it). |
+| `toggleled`, `hello_vref`, `canblast`, `dualcpu` | stack (~10.9–11.8 KB) | Every generated OneWili text command keeps its buffers on the stack: 5 KB in the call plus 5 KB in `ow__call`. In `dualcpu` it's the fallback path of `ow_stream_drops` (asking MAIN with `h\a\c`, for links without pushed credits), which the analysis can't rule out. That is more than the RP2350's two 4 KB scratch banks together. The SD calls don't have this problem; see [the MAIN link page](main-link.md#checking-it). |
 
 ## Planned order
 

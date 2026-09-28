@@ -1,0 +1,3 @@
+stream: display -> esp32 \(8 bytes\): 68 69 20 65 73 70 33 32
+stream: display -> cm0 \(6 bytes\): 68 69 20 63 6d 30
+!check: FAIL

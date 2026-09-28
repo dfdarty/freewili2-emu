@@ -9,11 +9,23 @@ at 1.2.0.
 
 ### Changed
 - WiliBSP updated to be4bdd6 (OneWili b0eeccd, with peer streams). OneWili's
-  display-CPU package now lives in `libs/onewili/wilibsp/`; the emulator
-  builds it in OneWili's host mode (`OWFW_NO_IRQ`). The new `canblast` and
-  `dualcpu` examples build and start.
+  display-CPU package now lives in `libs/onewili/wilibsp/`. The emulator
+  builds its FwGUI transport in OneWili's host mode (no UART interrupt), with
+  the board's clock for peer streams (`emu/src/onewili_fwgui_emu.c`).
+- `fw2emu hwcheck` lists `canblast` and `dualcpu` with the known OneWili
+  stack issue.
 
 ### Added
+- **OneWili peer streams.** MAIN routes datagrams between the display app
+  and other OneWili clients as `ow_stream_wire.h` specifies: HELLO and
+  CREDIT, the credit window, keepalive and link expiry, drop counting, and
+  Wireless > ESP32 Mode (`w\e`). `--peer esp32=dualcpu` stands in for the
+  ESP32 half of WiliBSP's `dualcpu` (PING/PONG, telemetry with a Wi-Fi scan
+  of the radio scene, LED, SCAN_NOW), so `dualcpu` runs; `--peer
+  esp32|cm0|host=script` puts an input script at the other end (`stream`
+  and `peer` commands). The web page starts `dualcpu` with its stand-in.
+  New self-test `stream_check`. See
+  [Peer streams](https://dfdarty.github.io/freewili2-emu/main-link/#peer-streams-esp32-cm0-pc).
 - CI builds and smoke-tests the emulator on 64-bit Arm Linux too, and runs
   `hwcheck` there with the aarch64 Arm toolchain: a Raspberry Pi 5 works as
   the development machine.

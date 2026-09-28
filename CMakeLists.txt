@@ -122,6 +122,7 @@ add_library(freewili2_bsp STATIC
     emu/src/dev_pdm.c
     emu/src/dev_main.c
     emu/src/dev_radio.c
+    emu/src/dev_stream.c
     emu/src/rtt.c
     emu/src/script.c
     emu/src/skin.c
@@ -160,6 +161,9 @@ else()
     set(_emu_instrument -finstrument-functions)
 endif()
 set_property(SOURCE ${_emu_entry_sources} APPEND PROPERTY COMPILE_OPTIONS ${_emu_instrument})
+# MAIN's peer-stream router uses OneWili's wire contract, as MAIN's own does.
+set_property(SOURCE emu/src/dev_stream.c APPEND PROPERTY INCLUDE_DIRECTORIES
+             "${WILIBSP_DIR}/libs/onewili/wilibsp/include")
 # CoreMark builds with the app's own flags (it measures this build) but
 # without the emulator's warnings, and finds cpu.c's port header.
 set_property(SOURCE emu/src/cpu.c third_party/coremark/core_list_join.c third_party/coremark/core_matrix.c
@@ -245,10 +249,14 @@ if(NOT EXISTS "${WILIBSP_DIR}/libs/onewili/wilibsp/CMakeLists.txt")
                         "  git submodule update --init --recursive")
 endif()
 add_subdirectory("${WILIBSP_DIR}/libs/onewili/wilibsp" "${CMAKE_BINARY_DIR}/wilibsp/onewili")
-# The transport's UART interrupt handler pops bytes by reading the PL011's
-# DR register in a loop, which host memory can't do; OWFW_NO_IRQ is its
-# documented host mode, draining the same ring with uart_getc() instead.
-target_compile_definitions(onewili_fwgui PRIVATE OWFW_NO_IRQ=1)
+# The FwGUI transport builds in its host mode (no UART interrupt), with the
+# board's clock for its peer streams: emu/src/onewili_fwgui_emu.c includes
+# the unmodified onewili_fwgui.c and says why.
+get_target_property(_owfw_sources onewili_fwgui SOURCES)
+list(FILTER _owfw_sources EXCLUDE REGEX "onewili_fwgui\\.c$")
+list(APPEND _owfw_sources "${CMAKE_CURRENT_SOURCE_DIR}/emu/src/onewili_fwgui_emu.c")
+set_property(TARGET onewili_fwgui PROPERTY SOURCES ${_owfw_sources})
+target_include_directories(onewili_fwgui PRIVATE "${WILIBSP_DIR}/libs/onewili/wilibsp/src")
 
 # ------------------------------------------------------------------ apps
 # WiliBSP's own apps, built straight from the submodule with their own
@@ -328,7 +336,12 @@ if(EMSCRIPTEN)
         list(GET _f 2 _desc)
         string(REPLACE "\\" "\\\\" _desc "${_desc}")
         string(REPLACE "\"" "\\\"" _desc "${_desc}")
-        string(APPEND _json "${_sep}\n  {\"name\": \"${_name}\", \"version\": \"${_ver}\", \"description\": \"${_desc}\"}")
+        # Options the page starts an app with when the URL gives no ?args=.
+        set(_args "")
+        if(_name STREQUAL "dualcpu")            # its ESP32 half: the emulator's stand-in
+            set(_args "--peer esp32=dualcpu --radio @town")
+        endif()
+        string(APPEND _json "${_sep}\n  {\"name\": \"${_name}\", \"version\": \"${_ver}\", \"description\": \"${_desc}\", \"args\": \"${_args}\"}")
         set(_sep ",")
     endforeach()
     string(APPEND _json "\n]\n")

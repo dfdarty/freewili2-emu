@@ -59,6 +59,8 @@
 #define EVT_TERM_INPUT  24
 #define EVT_SDFS        42
 #define EVT_POWER_ZONES 48
+#define EVT_STREAM      0xF1    /* OneWili peer stream payload, display -> MAIN */
+#define CMD_STREAM      0xF1    /* ... and MAIN -> display */
 #define CMD_TEXT   0x5D
 #define CMD_BINARY 0x5E
 #define CMD_SDFS   0x5F
@@ -239,6 +241,8 @@ static void send_cmd(uint8_t cmd, const uint8_t *p, size_t n) {
 }
 
 static size_t tx_pending(void) { return M.tx_len - M.tx_off; }
+
+void emu_main_stream_send(const uint8_t *p, size_t n) { send_cmd(CMD_STREAM, p, n); }
 
 /* Put the reply bytes that are due on the wire, as far as the display's RX
  * FIFO has room (its RTS stops MAIN otherwise). */
@@ -536,6 +540,16 @@ static void run_command(char *line) {
         if (!arg_long(&cur, &ms) || ms <= 0) { respond(path, false, "Invalid argument"); return; }
         emu_radio_ble_scan(now_us(), ms);       /* results follow as btscan events */
         respond(path, true, "Ok");
+    } else if (!strcmp(path, "w\\e")) {
+        long v;
+        if (!arg_long(&cur, &v) || v < 0 || v > 1) { respond(path, false, "Invalid argument"); return; }
+        emu_stream_set_esp32_mode((uint32_t)v);
+        respond(path, true, "Ok");
+    } else if (!strcmp(path, "h\\a\\c")) {
+        /* stream status for the asking client: mtu, queued, dropped_to, dropped_from */
+        uint32_t to, from;
+        emu_stream_counters(&to, &from);
+        respond(path, true, "128 0 %u %u", (unsigned)to, (unsigned)from);
     } else if (!strcmp(path, "h\\t")) {
         cmd_get_time(path);
     } else if (!strcmp(path, "h\\c")) {
@@ -1048,6 +1062,10 @@ static void handle_event(uint8_t code, const uint8_t *p, size_t n, double *cost)
     case EVT_SDFS:
         sd_request(p, n, cost);
         return;
+    case EVT_STREAM:
+        *cost += COST_EVENT_US;
+        emu_stream_from_display(p, n);
+        return;
     case EVT_POWER_ZONES:
         *cost += COST_EVENT_US;
         if (n >= 3) {
@@ -1129,6 +1147,13 @@ static void main_service(double now) {
         respond(path, true, "%s", ev);
         M.tx_not_before = M.tx_not_before > now ? M.tx_not_before : now;
         tx_pump(now);
+    }
+    if (!tx_pending()) {                              /* peer-stream datagrams that are due */
+        emu_stream_task(now);
+        if (tx_pending()) {
+            M.tx_not_before = M.tx_not_before > now ? M.tx_not_before : now;
+            tx_pump(now);
+        }
     }
     if (M.stream_ms && now >= M.stream_next) {
         if (!tx_pending()) send_gpio_report();

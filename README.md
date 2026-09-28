@@ -54,8 +54,10 @@ display (SSH, a container)? The emulator notices and runs headless.
 - The browser build needs Emscripten 4.0.15 (emsdk), or use the Dockerfile:
   `docker build -t freewili2-emu .`
 
-It can't run `.uf2` files (apps are rebuilt from source), and it doesn't model
-radios, USB host, DVI output or the CPU's real speed — check those on the
+It can't run `.uf2` files (apps are rebuilt from source). The radios are
+stand-ins (the stock Wi-Fi and Bluetooth scans over a scene of virtual
+networks, and a stand-in ESP32 for combined apps), the CPU's speed is an
+estimate, and USB host and DVI output aren't modelled — check those on the
 board. On Windows it runs in WSL2 ([steps](https://dfdarty.github.io/freewili2-emu/windows/));
 or open the repository in **GitHub Codespaces** for a ready-made
 environment. VS Code tasks and a debug setup come with it. See [Install and run](https://dfdarty.github.io/freewili2-emu/getting-started/).
@@ -71,9 +73,10 @@ environment. VS Code tasks and a debug setup come with it. See [Install and run]
   draws faster than the LCD bus allows is slow here too.
 - Sensor-log playback: feed a recorded flight, drive or walk (CSV) into the
   sensors, or use the built-in model-rocket flight.
-- 13 of WiliBSP's 17 example apps run, including the SD card, header GPIO
-  and VIO apps over the MAIN processor link (OneWili), and `retrochat` on
-  both cores. The radios are next. [Details](https://dfdarty.github.io/freewili2-emu/compatibility/).
+- 14 of WiliBSP's 19 example apps run, including the SD card, header GPIO
+  and VIO apps over the MAIN processor link (OneWili), `retrochat` on both
+  cores, and `dualcpu`, whose display half talks to a stand-in for its ESP32
+  half over OneWili peer streams. [Details](https://dfdarty.github.io/freewili2-emu/compatibility/).
 - WiliBSP's `fw.py press / touch / type / screenshot` work against it over RTT,
   for apps that call `agentio_init()` (as on the board).
 - A GitHub Action for your own app repository (`uses: dfdarty/freewili2-emu@v2`):

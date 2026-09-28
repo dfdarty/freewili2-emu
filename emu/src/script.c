@@ -188,6 +188,25 @@ static void exec(char *line, uint64_t now) {
         }
         return;
     }
+    bool is_stream = !strncmp(line, "stream", 6) && (line[6] == ' ' || line[6] == '\t' || !line[6]);
+    bool is_peer = !strncmp(line, "peer", 4) && (line[4] == ' ' || line[4] == '\t' || !line[4]);
+    if (is_stream || is_peer) {                        /* "text" may hold spaces */
+        const char *rest = line + (is_stream ? 6 : 4);
+        while (*rest == ' ' || *rest == '\t') rest++;
+        const char *err;
+        if (is_stream) {
+            err = emu_stream_script_send(rest);
+        } else {
+            char name[16], mode[16];
+            err = sscanf(rest, "%15s %15s", name, mode) == 2 ? emu_stream_set_peer(name, mode)
+                                                              : "peer <esp32|cm0|host> <off|script|dualcpu>";
+        }
+        if (err) {
+            if (s_from_web) emu_log("%s", err);
+            else emu_fatal("script line %d: %s", ln + 1, err);
+        }
+        return;
+    }
     char *save = NULL, *t[8] = { 0 };
     int n = 0;
     for (char *tok = strtok_r(line, " \t", &save); tok; tok = strtok_r(NULL, " \t", &save)) {

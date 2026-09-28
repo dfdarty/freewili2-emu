@@ -1,0 +1,4 @@
+!check: FAIL
+!stream: .*dropped
+ lost=0 late=0 
+!dualcpu: esp32 link stale

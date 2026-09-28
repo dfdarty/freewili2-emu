@@ -1,0 +1,13 @@
+# stream_check: emulator self-test of OneWili peer streams (see the app).
+# stream_check.args adds a scripted ESP32 and CM0; there is no host.
+expect "sc: waiting for peers" 15000
+stream esp32 01 02 03
+stream cm0 "hello cm0"
+expect "sc: polling" 15000
+wait 3500                  # past MAIN's 3 s expiry, had the app not kept its link alive
+stream esp32 bb
+expect "sc: quiet" 15000
+wait 3500                  # MAIN has closed the display's link by now
+stream esp32 aa
+expect "stream_check: [0-9]+ checks, 0 failed" 15000
+quit

@@ -1,0 +1,14 @@
+# dualcpu: WiliBSP's DISPLAY + ESP32 demo, against the emulator's stand-in for
+# its ESP32 half (dualcpu.args: --peer esp32=dualcpu --radio @town).
+expect "dualcpu: esp32 link live" 15000
+expect " pong=[3-9][0-9]* " 10000     # the stats line is logged in pieces
+# The round trip: the link is ~5.5 ms, and the app picks the PONG up after
+# the screen update it does in the same loop pass (the board: 6.0 ms).
+expect " rtt_min_us=([4-9][0-9]{3}|[1-3][0-9]{4}) " 3000
+touch 239 298              # GREEN
+expect "esp32: LED solid 0,[1-9][0-9]*,0" 3000
+touch 440 14               # SCAN
+expect "esp32: Wi-Fi scan" 3000
+expect " aps=1[0-9]/" 6000
+screenshot out/dualcpu.png device
+quit

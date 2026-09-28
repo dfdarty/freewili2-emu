@@ -748,7 +748,7 @@ KNOWN_UPSTREAM = {
         f"{DOCS}/compatibility/#known-upstream-issues"),
     ("dualcpu", "stack"): (
         "every generated OneWili text command keeps ~10 KB of buffers on the stack (libs/onewili; "
-        "here ow_stream_drops -> ow_hardware_system_stream_status)",
+        "here ow_stream_drops' h\\a\\c fallback -> ow_hardware_system_stream_status)",
         f"{DOCS}/compatibility/#known-upstream-issues"),
 }
 

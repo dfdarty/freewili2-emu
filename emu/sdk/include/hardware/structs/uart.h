@@ -1,8 +1,8 @@
 /* hardware/structs/uart.h — host shim: the PL011 register block is
  * uart_hw_t in hardware/uart.h; these are the register bits code names.
  * Register reads here are plain memory: a read of DR does not pop the FIFO.
- * The emulator builds OneWili's FwGUI transport with OWFW_NO_IRQ, its
- * documented host mode, which drains the UART with uart_getc() instead. */
+ * The emulator builds OneWili's FwGUI transport in its host mode, which
+ * drains the UART with uart_getc() instead (emu/src/onewili_fwgui_emu.c). */
 #ifndef FW2EMU_HARDWARE_STRUCTS_UART_H
 #define FW2EMU_HARDWARE_STRUCTS_UART_H
 

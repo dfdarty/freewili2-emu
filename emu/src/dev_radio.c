@@ -221,6 +221,22 @@ void emu_radio_wifi_scan(double now_us) {
     if (emu_verbose) emu_log("radio: Wi-Fi scan, %d network%s in range", s_nap, s_nap == 1 ? "" : "s");
 }
 
+/* The access points an ESP32 app's own scan would see (the dualcpu
+ * stand-in in dev_stream.c): the scene, with a scan's jitter. */
+int emu_radio_ap_list(emu_ap_view_t *out, int max) {
+    int n = 0;
+    for (int i = 0; i < s_nap && n < max; i++, n++) {
+        const ap_t *a = &s_ap[i];
+        memcpy(out[n].mac, a->mac, 6);
+        out[n].channel = a->ch;
+        out[n].auth = a->auth;
+        out[n].rssi = a->rssi + jitter();
+        if (out[n].rssi > -1) out[n].rssi = -1;
+        snprintf(out[n].ssid, sizeof out[n].ssid, "%s", a->ssid);
+    }
+    return n;
+}
+
 void emu_radio_ble_scan(double now_us, long ms) {
     queue_clear(false);
     if (ms < 0) ms = 0;

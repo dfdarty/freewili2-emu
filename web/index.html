@@ -228,7 +228,7 @@
   window.Module = {
     canvas,
     pageTitle: document.title,
-    arguments: (params.get('args') || '').split(' ').filter(Boolean),
+    arguments: (params.has('args') ? params.get('args') : (current.args || '')).split(' ').filter(Boolean),
     print: t => log(t),
     printErr: t => log(t, t.startsWith('[emu]') ? 'emu' : 'err'),
     onRuntimeInitialized: () => { statusEl.textContent = ''; canvas.focus(); },

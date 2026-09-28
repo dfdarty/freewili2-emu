@@ -10,8 +10,8 @@ The MAIN firmware isn't public. The emulator provides a MAIN CPU that
 answers the unmodified OneWili client **on the wire**, byte for byte
 (`emu/src/dev_main.c`). The client library isn't changed or replaced, so
 `ow_sd_*`, `ow_io_gpio_*` and the rest behave as they do on the board, up to
-the limits below. `hello_sdcard`, `toggleled` and `hello_vref` run
-unmodified.
+the limits below. `hello_sdcard`, `toggleled`, `hello_vref` and `dualcpu`
+run unmodified.
 
 ## What's modelled
 
@@ -22,6 +22,7 @@ unmodified.
 | Header supply (VIO) | the rail chosen with `ioexp_vref()` on the display side, as the display's ADC monitor reads it | `ioexp_vref()`, `adc_read()` on inputs 5 (VIO) and 1 (Vout) |
 | Programmable Vout | on/off and 1.0–5.5 V; the ANALOG power zone must be on | `ow_io_analog_out_set_v_prog_vout` |
 | Wi-Fi and Bluetooth scans | the stock ESP32-C5 firmware's scans, over a scene of virtual networks and devices ([below](#wi-fi-and-bluetooth-scans)) | `ow_wireless_wifi_on_scan_for_access_points`, `ow_wireless_bluetooth_le_on_scan_bt_devices` (wifiscan / btscan text events) |
+| Peer streams | MAIN's router between the display app and other OneWili clients: a stand-in ESP32, CM0 or PC ([below](#peer-streams-esp32-cm0-pc)) | `ow_stream_write`, `ow_stream_poll`, `ow_stream_drops`, `ow_wireless_e_sp32_mode` (`w\e`), `ow_hardware_system_stream_status` (`h\a\c`) |
 | Power-zone refusals | `EPOWERZONE` for GPIO/analog commands, once the app has reported its zones | `ow_fwgui_send_power_zones` |
 | Anything else | a well-formed failure reply: the call returns `OW_ERR_FAILED` at once instead of timing out after 5 s | the other ~480 generated commands |
 
@@ -247,6 +248,68 @@ Python client's framing; not yet checked against a board:
 - The scans report what the stock firmware reports: no advertisement data,
   no raw frames, and only access points, not the devices talking to them.
 
+## Peer streams (ESP32, CM0, PC)
+
+WiliBSP apps can be one half of a combined app: the display CPU and the
+ESP32-C5 (or the CM0 Linux module, or a PC) exchange datagrams of 1–128
+bytes that MAIN routes between them. OneWili's `ow_stream_write()` sends
+one to a peer (`OW_PEER_ESP32`, `OW_PEER_CM0`, `OW_PEER_HOST`, or the
+display itself) and `ow_stream_poll()` returns the next one that arrived,
+with the sender's id. WiliBSP's `dualcpu` is the example.
+
+The emulator's MAIN routes them as the stream contract in OneWili's
+`ow_stream_wire.h` says:
+
+- The display's link opens with the client's HELLO, which MAIN answers
+  with a CREDIT, and stays open while stream frames keep coming (the client
+  sends a HELLO every second while it polls). After 3 s of silence MAIN
+  closes it.
+- MAIN answers every data frame with a CREDIT. That moves the client's
+  768-unit window on, and carries MAIN's drop totals for
+  `ow_stream_drops()`.
+- MAIN drops a datagram, and counts it, when it's addressed to MAIN
+  itself, or to a peer that isn't there. The ESP32 is only there with its
+  power zone (5) on and **Wireless > ESP32 Mode** set to OneWili API
+  (`ow_wireless_e_sp32_mode(&dev, 1)`, which `dualcpu` sends at start).
+  A datagram for the display while its link is closed is dropped as well.
+
+The other clients are stand-ins, chosen with `--peer`:
+
+| `--peer` | What's at the other end |
+|---|---|
+| `esp32=dualcpu` | the ESP32 half of `dualcpu`: answers PING with PONG, sends telemetry once a second (uptime, temperature, free RAM and PSRAM, its LED, and the strongest networks of a Wi-Fi scan of the [radio scene](#wi-fi-and-bluetooth-scans)), sets its LED, scans on SCAN_NOW |
+| `esp32=script`, `cm0=script`, `host=script` | an [input script](scripting.md): `stream esp32 01 02 03` or `stream cm0 "hello"` sends a datagram to the app, and every datagram the app sends there is logged for `expect` |
+
+```text
+$ build/bin/dualcpu --peer esp32=dualcpu --radio @town
+$ build/bin/myapp --peer esp32=script --script test.txt
+...
+[emu] stream: display -> esp32 (8 bytes): 68 69 20 65 73 70 33 32  |hi esp32|
+```
+
+![dualcpu against the stand-in for its ESP32 half](dualcpu.png)
+
+On the ESP32 link, a datagram takes 2.6 ms each way. So `dualcpu`'s PING
+comes back in about 5.5 ms plus however long the app takes to poll again.
+On a board, `dualcpu` shows 6.0 ms. In the emulator it's often more,
+because its screen update runs in the same loop pass as the PING, and the
+emulator's estimate of that drawing code's speed is on the slow side (see
+[CPU speed](debugging.md#is-it-fast-enough-cpu-speed)). A CM0 or PC
+datagram takes 1 ms. `-v` logs the link opening and closing, and every
+drop with its reason.
+
+Modelled from OneWili's stream client and `ow_stream_wire.h`, and
+`dualcpu`'s protocol; not yet checked against MAIN's router:
+
+- **Inferred:** `h\a\c` reports the display link's own totals (MTU 128,
+  nothing queued). The display uses pushed CREDITs instead, and only falls
+  back to `h\a\c` on links without them.
+- The CM0 and PC text commands `h\a\w` and `h\a\p` aren't modelled; no
+  emulated client uses them.
+- The stand-in's telemetry values are plausible, not measured. The
+  temperature rises from 39.5 °C to about 42 °C over five minutes, and
+  GPIO and text-event mirroring counts stay at 0.
+
 ## Checking it
 
 - `-v` logs every OneWili response (`main: [i\g\t 00000001F681D880 3 Ok 1]`),
@@ -255,6 +318,11 @@ Python client's framing; not yet checked against a board:
   apps. It runs 67 checks through the unmodified client: every SD operation
   and its errors, GPIO, PWM, streamed reports, Vout, the board clock,
   Wi-Fi and Bluetooth scans, `EPOWERZONE` and an unmodelled command.
+- `tests/apps/stream_check` checks the peer-stream router the same way (17
+  checks): HELLO and CREDIT, loopback, each kind of drop, ESP32 Mode,
+  datagrams to and from scripted peers, a burst of full datagrams,
+  keepalive and link expiry. `dualcpu` runs against the ESP32 stand-in in
+  the smoke tests.
 - `fw2emu hwcheck` builds the app for the board. Note that every OneWili
   text command (`ow_io_gpio_*`, `ow_io_analog_*`, …) keeps about 10 KB of
   buffers on the stack. That is more than both 4 KB scratch banks, so
@@ -299,6 +367,7 @@ the client code.
 | command `0x5D` | console output: responses and `[*…]` text events |
 | command `0x5E` | binary WILI event frames |
 | command `0x5F` | one SDFS frame |
+| event / command `0xF1` | one peer-stream payload: `dst`, `src`, 1–128 data bytes, or a HELLO / CREDIT control frame (`ow_stream_wire.h`) |
 
 **Console.** A command is `0x02` (back to the menu root, quiet mode), a menu
 path and its arguments, then a newline, e.g. `\x02i\g\t 25\n`. The reply is

@@ -89,6 +89,20 @@ const char *emu_radio_load(const char *path);     /* --radio FILE, or "@town"; e
 void emu_radio_wifi_scan(double now_us);
 void emu_radio_ble_scan(double now_us, long ms);
 const char *emu_radio_poll(double now_us, char *out, size_t cap);   /* event name + fields, or NULL */
+typedef struct { uint8_t mac[6]; int channel, auth, rssi; char ssid[33]; } emu_ap_view_t;
+int emu_radio_ap_list(emu_ap_view_t *out, int max);  /* the scene's access points, one scan's jitter applied */
+
+/* OneWili peer streams (dev_stream.c): MAIN's router between the display app
+ * and stand-in ESP32 / CM0 / host clients. dev_main.c carries the display's
+ * link (FwGUI event and command 0xF1). */
+void        emu_stream_from_display(const uint8_t *p, size_t n);  /* event 0xF1 payload P */
+void        emu_stream_task(double now_us);                        /* deliveries, link expiry, stand-ins */
+void        emu_stream_set_esp32_mode(uint32_t v);                 /* w\e: 0 default firmware, 1 OneWili API */
+void        emu_stream_counters(uint32_t *dropped_to, uint32_t *dropped_from);   /* h\a\c for the display */
+const char *emu_stream_peer_arg(const char *arg);                  /* --peer esp32=dualcpu; error or NULL */
+const char *emu_stream_set_peer(const char *name, const char *mode);
+const char *emu_stream_script_send(const char *args);              /* script: stream <peer> <bytes> */
+void        emu_main_stream_send(const uint8_t *p, size_t n);      /* MAIN -> display: command 0xF1 */
 
 /* App code at the RP2350's speed (cpu.c): each core's app code is timed
  * between SDK calls, scaled from the PC's speed to the chip's, and the
