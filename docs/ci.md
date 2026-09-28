@@ -57,6 +57,12 @@ SDK and Arm GCC the first time; later runs take it from the cache.
 
 The step's output `result` is `pass` or `fail`.
 
+App code runs at the RP2350's estimated speed, measured against the runner
+at the start of each run, so a slow or busy runner doesn't make the app look
+slower than it is ([CPU speed](debugging.md#is-it-fast-enough-cpu-speed)).
+The log ends with each core's load. `args: --cpu host` runs app code at the
+runner's full speed instead.
+
 ## Examples
 
 Several apps in one repository, each with its own test, with sanitizers:

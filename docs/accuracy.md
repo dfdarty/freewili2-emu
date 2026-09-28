@@ -57,9 +57,12 @@ attaches a model to each bus, register block or wire protocol:
   completes at once. PIO audio streams (I2S, PDM) and the two UART links
   (the board manager at 62 500 baud, the MAIN CPU at 8 Mbaud) are paced at
   their real rates.
-- **CPU speed.** Your PC runs the app much faster than a 250 MHz Cortex-M33,
-  and `sleep_ms()` waits in real time. Heavy computation, drawing and
-  decoding will be slower on the board.
+- **CPU speed.** App code is slowed to the RP2350's speed at the app's
+  clock, from a CoreMark measurement of your PC at start-up
+  ([details](debugging.md#is-it-fast-enough-cpu-speed)). It is an estimate,
+  good to within about a factor of two: PSRAM cache misses and
+  double-precision maths aren't counted, so heavy code of either kind is
+  slower on the board.
 - **Acoustics.** All microphones hear the same sound with no delay between
   capsules; per-mic gains are the only spatial effect.
 - **Sensors** return what you set or [play from a log](sensors-and-sound.md#playing-a-sensor-log),
@@ -128,7 +131,8 @@ example apps.
 | Does it corrupt memory? | the [sanitizer build](debugging.md#sanitizers-fw2_emu_sanitize) |
 | Does it assume 64-bit pointers? | the [32-bit build](debugging.md#32-bit-build-fw2_emu_32bit) |
 | Can the SPI or I2C bus keep up? | the [bus readout](debugging.md#is-it-fast-enough-bus-timing) |
-| Is the CPU fast enough? Does the radio work? Does it survive a real battery? | the board |
+| Is the CPU fast enough? | the [CPU readout](debugging.md#is-it-fast-enough-cpu-speed) for an estimate; the board to be sure |
+| Does the radio work? Does it survive a real battery? | the board |
 
 ## The emulator runs source, not UF2 files
 

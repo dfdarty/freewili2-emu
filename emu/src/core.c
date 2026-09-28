@@ -8,6 +8,7 @@
  */
 #include "emu/emu.h"
 #include "common/uf2_info.h"
+#include "hardware/clocks.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -74,12 +75,15 @@ EM_JS(void, js_mount_host_fs, (void), {
 /* FW2_EMU_SANITIZE builds: stop at the first UBSan report, with a stack, but
  * let tests/ubsan.supp name known upstream (WiliBSP) findings we cannot patch.
  * Any of these can still be overridden with ASAN_OPTIONS / UBSAN_OPTIONS. */
-const char *__ubsan_default_options(void);
-const char *__ubsan_default_options(void) {
+/* The sanitizer runtime calls these while it starts, before anything else
+ * is set up: not instrumented, so cpu.c's hooks don't run that early. */
+#define EMU_NOINSTR __attribute__((no_instrument_function))
+EMU_NOINSTR const char *__ubsan_default_options(void);
+EMU_NOINSTR const char *__ubsan_default_options(void) {
     return "halt_on_error=1:print_stacktrace=1:suppressions=" FW2_EMU_UBSAN_SUPPRESSIONS;
 }
-const char *__asan_default_options(void);
-const char *__asan_default_options(void) { return "abort_on_error=0:detect_leaks=1"; }
+EMU_NOINSTR const char *__asan_default_options(void);
+EMU_NOINSTR const char *__asan_default_options(void) { return "abort_on_error=0:detect_leaks=1"; }
 #endif
 
 int fw2_emu_app_main(void);
@@ -341,7 +345,7 @@ static void window_open(void) {
 /* Once a second: how busy each bus was and how much pixel data reached the
  * LCD, as full 480x320 screens' worth. A bus near 100% is the bottleneck. */
 static bool s_perf_log;                /* --perf: also print it */
-static char s_perf[160];
+static char s_perf[200];
 const char *emu_perf_line(void) { return s_perf; }
 
 static int fmt_hz(char *o, size_t cap, uint32_t hz) {
@@ -357,7 +361,7 @@ static void perf_task(uint64_t now_us) {
     emu_perf_t cur;
     emu_perf_counters(&cur);
     double span_ns = (double)(now_us - last_us) * 1000.0;
-    int n = 0;
+    int n = emu_cpu_perf(s_perf, sizeof s_perf, span_ns);
     char hz[24];
     for (int b = 0; b < 2; b++)
         if (cur.spi_hz[b]) {
@@ -481,6 +485,7 @@ void tight_loop_contents(void) {
 /* ------------------------------------------------------------- app exit */
 static void finish(const char *why, int status) __attribute__((noreturn));
 static void finish(const char *why, int status) {
+    emu_cpu_report();
     s_app_exited = true;
     s_exit_reason = why;
     if (s_exit_shot && emu_screenshot(s_exit_shot, false) != 0) {
@@ -502,6 +507,7 @@ void emu_run_end(const char *why, int status) {
 /* The app ended (main returned, panic, watchdog reboot / HOME recovery). */
 void emu_app_exit(const char *why) {
     emu_log("app exited: %s", why);
+    emu_cpu_report();
     if (s_headless || s_automated) finish(why, 0);
     /* On hardware the loader takes over; here the window stays up so the
      * last frame can be inspected. */
@@ -551,6 +557,8 @@ static void usage(void) {
         "  --record FILE       write what you do (keys, clicks, touches) as an input script\n"
         "  --perf              log bus load and LCD throughput once a second\n"
         "  --instant-bus       SPI/I2C transfers take no time (to compare against the old, untimed model)\n"
+        "  --cpu chip|host     app code at the RP2350's speed (default), or at the PC's full speed\n"
+        "  --cpu-factor F      the PC runs app code F times as fast as the chip (default: measured)\n"
         "  --sdcard DIR        folder that stands in for the SD card (default ./sdcard; 'none' = no card)\n"
         "  --sensor NAME=V     set a sensor or sound: temp=24 lux=320 tilt=30,0 tone=1000,8000 mics=1,1,0,1\n"
         "                      gyro=0,0,0 mag=22,5,-40 tilt=PITCH,ROLL noise=1\n"
@@ -599,6 +607,12 @@ int main(int argc, char **argv) {
             if (!emu_set_rtc(argv[++i])) { fprintf(stderr, "bad --rtc %s (\"YYYY-MM-DD HH:MM:SS\")\n", argv[i]); return 2; }
         }
         else if (!strcmp(a, "--instant-bus")) emu_bus_timing = false;
+        else if (!strcmp(a, "--cpu") && i + 1 < argc) {
+            if (!emu_cpu_set_mode(argv[++i])) { fprintf(stderr, "bad --cpu %s (chip or host)\n", argv[i]); return 2; }
+        }
+        else if (!strcmp(a, "--cpu-factor") && i + 1 < argc) {
+            if (!emu_cpu_set_factor(argv[++i])) { fprintf(stderr, "bad --cpu-factor %s (a number above 0)\n", argv[i]); return 2; }
+        }
         else if (!strcmp(a, "--sdcard") && i + 1 < argc) sdcard = argv[++i];
         else if (!strcmp(a, "-v")) emu_verbose = 1;
         else if (!strcmp(a, "-vv")) emu_verbose = 2;
@@ -659,7 +673,12 @@ int main(int argc, char **argv) {
         if (err) { fprintf(stderr, "--sensor-csv %s\n", err); return 2; }
     }
 
+    /* Measure the PC last, just before the app starts: SDL and the device
+     * models are up, so nothing else is starting in the background. */
+    emu_cpu_init(clock_get_hz(clk_sys));
+    int saved = emu_cpu_app_begin(false);
     int rc = fw2_emu_app_main();
+    emu_cpu_app_end(saved, false);
     char why[48];
     snprintf(why, sizeof why, "main() returned %d", rc);
     emu_app_exit(why);

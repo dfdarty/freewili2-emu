@@ -124,7 +124,13 @@ add_library(freewili2_bsp STATIC
     emu/src/rtt.c
     emu/src/script.c
     emu/src/skin.c
-    emu/src/stub_dvi.c)
+    emu/src/stub_dvi.c
+    emu/src/cpu.c
+    # --- CoreMark's workload, unmodified: cpu.c's speed calibration ---
+    third_party/coremark/core_list_join.c
+    third_party/coremark/core_matrix.c
+    third_party/coremark/core_state.c
+    third_party/coremark/core_util.c)
 
 # Shim headers first so they win over any SDK-looking header.
 target_include_directories(freewili2_bsp BEFORE PUBLIC
@@ -138,6 +144,29 @@ target_compile_definitions(freewili2_bsp PUBLIC
     PICO_BUILD=1
     _GNU_SOURCE)
 target_compile_options(freewili2_bsp PRIVATE -Wall -Wno-unused-parameter -Wno-unused-function)
+
+# App code at the chip's speed (emu/src/cpu.c): the files that hold what app
+# code calls -- the SDK, RTT, core.c and the WS2812 hook pioasm's header calls
+# -- report every entry and exit, so cpu.c sees each core cross between app
+# code and the emulator. The device models behind them don't need to.
+set(_emu_entry_sources
+    emu/src/core.c emu/src/sdk_periph.c emu/src/sdk_sync.c emu/src/multicore.c
+    emu/src/rtt.c emu/src/stub_dvi.c emu/src/dev_leds.c)
+if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+    set(_emu_instrument -finstrument-functions-after-inlining)
+else()
+    set(_emu_instrument -finstrument-functions)
+endif()
+set_property(SOURCE ${_emu_entry_sources} APPEND PROPERTY COMPILE_OPTIONS ${_emu_instrument})
+# CoreMark builds with the app's own flags (it measures this build) but
+# without the emulator's warnings, and finds cpu.c's port header.
+set_property(SOURCE emu/src/cpu.c third_party/coremark/core_list_join.c third_party/coremark/core_matrix.c
+             third_party/coremark/core_state.c third_party/coremark/core_util.c
+             APPEND PROPERTY INCLUDE_DIRECTORIES
+             "${CMAKE_CURRENT_SOURCE_DIR}/emu/src/cpu" "${CMAKE_CURRENT_SOURCE_DIR}/third_party/coremark")
+set_property(SOURCE third_party/coremark/core_list_join.c third_party/coremark/core_matrix.c
+             third_party/coremark/core_state.c third_party/coremark/core_util.c
+             APPEND PROPERTY COMPILE_OPTIONS -w)
 if(FW2_EMU_SANITIZE)
     set_source_files_properties(emu/src/core.c PROPERTIES COMPILE_DEFINITIONS
         "FW2_EMU_UBSAN_SUPPRESSIONS=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/ubsan.supp\"")

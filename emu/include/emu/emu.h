@@ -89,6 +89,23 @@ const char *emu_radio_load(const char *path);     /* --radio FILE, or "@town"; e
 void emu_radio_wifi_scan(double now_us);
 void emu_radio_ble_scan(double now_us, long ms);
 const char *emu_radio_poll(double now_us, char *out, size_t cap);   /* event name + fields, or NULL */
+
+/* App code at the RP2350's speed (cpu.c): each core's app code is timed
+ * between SDK calls, scaled from the PC's speed to the chip's, and the
+ * difference slept off. The emulator brackets every call into app code
+ * (main, core 1's entry, IRQ handlers, timer callbacks) with app_begin/end;
+ * callback = an IRQ or timer, whose debt waits until it has returned. */
+bool emu_cpu_set_mode(const char *mode);           /* "chip" (default) or "host" */
+bool emu_cpu_set_factor(const char *f);            /* --cpu-factor: PC speed / chip speed */
+void emu_cpu_init(uint32_t sys_hz);                /* calibrates; logs the factor */
+void emu_cpu_clock_hz(uint32_t hz);                /* set_sys_clock_*() changed clk_sys */
+int  emu_cpu_app_begin(bool callback);
+void emu_cpu_app_end(int saved, bool callback);
+void emu_cpu_switched(unsigned core);              /* multicore.c: now running this core */
+void emu_cpu_launch(unsigned core);                /* core 1 starts afresh */
+int  emu_cpu_perf(char *out, size_t cap, double span_ns);   /* "CPU0 45%  CPU1 3%" */
+void emu_cpu_report(void);                         /* the run's summary, at exit */
+double emu_cpu_factor(void);                       /* chip time per PC time of app code (1: not slowed) */
 void emu_irq_raise_core(unsigned core, unsigned irq); /* a per-core source (SIO FIFO, doorbell) */
 void emu_irq_deliver_pending(void);                /* run IRQs held for the current core */
 

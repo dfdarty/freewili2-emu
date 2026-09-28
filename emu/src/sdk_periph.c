@@ -397,12 +397,19 @@ bool irq_is_enabled(uint n) { return s_irq_en[get_core_num()][n]; }
 
 static void dma_irq_dispatch(unsigned n);
 
+/* A handler is app code: cpu.c times it at the chip's speed. */
+static void app_irq(irq_handler_t h) {
+    int saved = emu_cpu_app_begin(true);
+    h();
+    emu_cpu_app_end(saved, true);
+}
+
 static void irq_dispatch(unsigned n) {
     static int depth;
     if (depth > 4) return;
     depth++;
     if (n == DMA_IRQ_0 || n == DMA_IRQ_1) dma_irq_dispatch(n);
-    else for (int i = 0; i < MAX_HANDLERS; i++) if (s_irq[n][i]) s_irq[n][i]();
+    else for (int i = 0; i < MAX_HANDLERS; i++) if (s_irq[n][i]) app_irq(s_irq[n][i]);
     depth--;
 }
 
@@ -488,7 +495,7 @@ static void dma_irq_dispatch(unsigned n) {
             pend |= 1u << i;
     if (!pend) return;
     if (n == DMA_IRQ_0) emu_dma_hw.ints0 = pend; else emu_dma_hw.ints1 = pend;
-    for (int i = 0; i < MAX_HANDLERS; i++) if (s_irq[n][i]) s_irq[n][i]();
+    for (int i = 0; i < MAX_HANDLERS; i++) if (s_irq[n][i]) app_irq(s_irq[n][i]);
     for (uint i = 0; i < NUM_DMA_CHANNELS; i++)           /* W1C of INTSn by the handler */
         if (pend & (1u << i)) { if (n == DMA_IRQ_0) s_dma[i].irq0_st = false; else s_dma[i].irq1_st = false; }
     if (n == DMA_IRQ_0) emu_dma_hw.ints0 = 0; else emu_dma_hw.ints1 = 0;
@@ -813,10 +820,16 @@ uint32_t clock_get_hz(clock_handle_t c) { return c < CLK_COUNT ? s_clk[c] : 0; }
 bool clock_configure(clock_handle_t c, uint32_t src, uint32_t aux, uint32_t sf, uint32_t f) {
     (void)src; (void)aux; (void)sf;
     if (c < CLK_COUNT) s_clk[c] = f;
+    if (c == clk_sys) emu_cpu_clock_hz(f);
     return true;
 }
 bool clock_configure_undivided(clock_handle_t c, uint32_t src, uint32_t aux, uint32_t sf) { return clock_configure(c, src, aux, sf, sf); }
-bool set_sys_clock_khz(uint32_t khz, bool required) { (void)required; s_clk[clk_sys] = khz * 1000u; return true; }
+bool set_sys_clock_khz(uint32_t khz, bool required) {
+    (void)required;
+    s_clk[clk_sys] = khz * 1000u;
+    emu_cpu_clock_hz(s_clk[clk_sys]);
+    return true;
+}
 
 /* =============================================================== PSRAM */
 #define EMU_PSRAM_BASE 0x11000000u
@@ -952,14 +965,18 @@ void emu_timers_task(void) {
         uint64_t due = s_alarm[i].at;
         if (s_alarm[i].rt) {
             repeating_timer_t *rt = s_alarm[i].rt;
+            int saved = emu_cpu_app_begin(true);
             bool keep = rt->callback(rt);
+            emu_cpu_app_end(saved, true);
             if (s_alarm[i].id != id) continue;              /* cancelled from the callback */
             if (!keep) { s_alarm[i].id = 0; rt->alarm_id = 0; continue; }
             uint64_t d = (uint64_t)(rt->delay_us < 0 ? -rt->delay_us : rt->delay_us);
             s_alarm[i].at = rt->delay_us < 0 ? due + d : emu_time_us() + d;
             if (s_alarm[i].at < now) s_alarm[i].at = now + d;  /* don't replay a backlog */
         } else {
+            int saved = emu_cpu_app_begin(true);
             int64_t r = s_alarm[i].cb(id, s_alarm[i].user);
+            emu_cpu_app_end(saved, true);
             if (s_alarm[i].id != id) continue;
             if (r == 0) s_alarm[i].id = 0;
             else s_alarm[i].at = r > 0 ? due + (uint64_t)r : emu_time_us() + (uint64_t)(-r);

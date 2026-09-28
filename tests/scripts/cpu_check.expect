@@ -1,0 +1,2 @@
+cc: (PASS|SKIP)
+!cc: FAIL

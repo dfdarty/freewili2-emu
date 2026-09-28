@@ -102,8 +102,9 @@ static void host_sleep_us(uint64_t us) {
 /* ------------------------------------------------------------- switching */
 static void switch_to(unsigned to, bool dying) {
     unsigned from = s_cur;
-    s_cur = to;
     s_core[to].slice_start_us = emu_time_us();
+    s_cur = to;
+    emu_cpu_switched(to);                  /* last thing before the swap: cpu.c's hooks follow s_cur */
 #ifdef __EMSCRIPTEN__
     (void)dying;
     emscripten_fiber_swap(&s_core[from].fiber, &s_core[to].fiber);
@@ -156,7 +157,9 @@ static void core1_body(void) {
     __sanitizer_finish_switch_fiber(NULL, &s_core[0].asan_bottom, &s_core[0].asan_size);
 #endif
     emu_irq_deliver_pending();
+    int saved = emu_cpu_app_begin(false);
     s_core1_entry();
+    emu_cpu_app_end(saved, false);
     /* The SDK's core-1 wrapper returns to the bootrom, which waits for the
      * next launch. Nothing more runs on core 1. */
     emu_log("core 1: its entry function returned; core 1 is idle until the next launch");
@@ -215,6 +218,7 @@ void multicore_launch_core1(void (*entry)(void)) {
     makecontext(&c->ctx, core1_body, 0);
 #endif
     c->running = true;
+    emu_cpu_launch(1);
     emu_log("core 1: launched");
 }
 

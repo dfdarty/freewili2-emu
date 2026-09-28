@@ -12,6 +12,7 @@ running out of memory, overflowing the 4 KB stack, and code that assumes
 | `FW2_EMU_32BIT` build | code that assumes 64-bit pointers or `long` |
 | `tools/fw2emu hwcheck` | apps that do not fit the real chip: image, RAM, PSRAM, stack |
 | the bus readout (`--perf`) | drawing and sensor code that the SPI or I2C bus can't keep up with |
+| the CPU readout (the same line) | code the RP2350's cores can't run fast enough |
 
 ## Is it fast enough? Bus timing
 
@@ -31,22 +32,79 @@ the app configured:
 - **I2C** costs 9 clocks a byte plus start and stop: a sensor read of 6
   bytes after a 1-byte register write takes about 0.2 ms at 400 kHz.
 
-The device's bottom edge shows each bus's load over the last second and how
+The device's bottom edge shows how busy each core was over the last second
+(see [CPU speed](#is-it-fast-enough-cpu-speed)), each bus's load, and how
 much pixel data reached the LCD, in full screens' worth:
 
 ```text
-SPI1 62.5 MHz 41%  I2C1 400 kHz 2%  LCD 10.4 screens/s
+CPU0 45%  SPI1 62.5 MHz 41%  I2C1 400 kHz 2%  LCD 10.4 screens/s
 ```
 
 A bus near 100% is your bottleneck: draw smaller regions, or fewer times.
 `--perf` prints the same line to the log once a second, so a script can
 check it with `expect`.
 
-Two things are still not modelled: the RP2350's own CPU speed (your PC runs
-the app's code much faster than a 250 MHz Cortex-M33, so compute-heavy code
-can still look faster than it is) and memory-to-memory DMA, which completes
-at once. `--instant-bus` turns bus timing off, to see how much of a slowdown
-is the bus.
+Memory-to-memory DMA is not timed: it completes at once. `--instant-bus`
+turns bus timing off, to see how much of a slowdown is the bus.
+
+## Is it fast enough? CPU speed
+
+Your PC runs app code tens of times faster than a Cortex-M33, so the
+emulator slows it down: each core's app code takes about as long as it would
+on the RP2350 at the clock the app set (250 MHz with WiliBSP). An app that
+would drop frames on the board drops them here too.
+
+How it works: the emulator times each core's app code between SDK calls
+(interrupt handlers and timer callbacks included), multiplies that by how
+much faster your PC is than the chip, and makes the core wait out the
+difference at its next SDK call. The buses, DMA, timers and the other core
+carry on meanwhile, as they would while the chip computed, and the two cores
+overlap as on the board. How much faster your PC is gets measured at
+start-up by running [CoreMark](https://github.com/eembc/coremark)'s workload
+(list, matrix and state-machine code) in the same build as your app, against
+the Cortex-M33's rating of about 4 CoreMark/MHz. The log says what it found:
+
+```text
+[emu] cpu: app code runs at the RP2350's speed at 250 MHz (this PC is 27x as fast; --cpu host runs it at full speed)
+```
+
+The bottom edge shows each core's load (`CPU0 45%`), and a run ends with a
+summary:
+
+```text
+[emu] cpu: core 0 busy 74% of the run, 88% in its busiest second (the RP2350 at 250 MHz, estimated)
+```
+
+A core near 100% is the bottleneck: the app can't do more per second on the
+board. `--cpu host` runs app code at your PC's full speed, as before (the
+load is still estimated; `>100%` means more than the chip could do), and
+`--cpu-factor F` sets the speed ratio instead of measuring it.
+
+**It is an estimate, good to within a factor of about two.** One benchmark
+stands for all app code, and code that suits your PC better or worse than
+CoreMark does comes out faster or slower than it is. Things it leaves out:
+
+- **PSRAM apps** (`fw2_psram_app()`): on the board their code and data are in
+  PSRAM, behind the RP2350's 16 KB cache. Cache misses aren't modelled, so
+  code with a large working set runs slower on the board. The log says so
+  when such an app starts.
+- **Double-precision maths.** The M33's FPU is single-precision; the SDK does
+  `double` through the RP2350's double coprocessor, a function call per
+  operation. Maths-heavy `double` code is slower on the board than the
+  estimate. `float` is in hardware on both.
+- **Your PC's `memcpy` and `memset`** use its vector units, so large copies
+  and fills come out quicker here than on the chip.
+- **The browser build and the native one disagree** for some code: the
+  web page measures CoreMark in WebAssembly, whose relative speeds differ
+  from native code's. SquachWatch's drawing, for one, comes out at about
+  65 ms a frame natively and 150 ms in a browser. Treat such a spread as the
+  range the board will fall in.
+- The 4 CoreMark/MHz figure is Arm's, for its own compiler. It will be
+  checked against a FREE-WILi 2 running the same apps.
+
+Scripts see the slowed app too: a test whose `wait`s were tuned at PC speed
+may need longer ones, which is the point. `--cpu host` gives the old
+behaviour where a test needs it.
 
 ## gdb
 

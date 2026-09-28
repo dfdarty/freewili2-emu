@@ -93,6 +93,11 @@ endfunction()
 
 function(fw2_psram_app target)
     fw2_display_app(${target} ${ARGN})
+    # Tells the emulator (emu/src/cpu.c) this app's code and data live in
+    # PSRAM on the board, behind the XIP cache, which its speed model leaves out.
+    set(_flag "${CMAKE_CURRENT_BINARY_DIR}/${target}_fw2_psram_app.c")
+    file(CONFIGURE OUTPUT "${_flag}" CONTENT "const int fw2_emu_psram_app = 1;\n")
+    target_sources(${target} PRIVATE "${_flag}")
 endfunction()
 
 # An app's own CMakeLists.txt may add POST_BUILD steps that inspect the Arm

@@ -6,6 +6,24 @@ change that would break a v1 workflow gets a new major version.
 
 ## [Unreleased]
 
+### Added
+- App code runs at the RP2350's speed. Each core's app code (interrupt
+  handlers and timer callbacks included) is timed between SDK calls and
+  slowed to what the Cortex-M33 would take at the app's clock, from a
+  CoreMark measurement of the PC at start-up; the buses, DMA and the other
+  core carry on meanwhile. It is an estimate: PSRAM cache misses and
+  double-precision maths aren't counted. `--cpu host` runs app code at the
+  PC's full speed as before; `--cpu-factor F` sets the ratio.
+  `tests/apps/cpu_check` checks it on core 0, core 1, in a timer callback
+  and on both cores at once.
+- The device's bottom edge and `--perf` show each core's load (`CPU0 45%`),
+  and a run ends with each core's average and peak.
+
+### Changed
+- Tests run at the chip's speed too, so an app too slow for the board is too
+  slow in its test. A script tuned at PC speed may need longer `wait`s, or
+  `--cpu host`.
+
 ## [1.2.0] — 2026-09-28
 
 ### Added
