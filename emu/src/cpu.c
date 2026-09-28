@@ -40,6 +40,21 @@
 
 /* The hooks run on every call into the emulator and touch only this file's
  * own state: no instrumentation of their own, and no sanitizer checks. */
+/* A sanitizer build's checks slow memory-heavy code far more than they slow
+ * CoreMark, so its estimate would run pessimistic (retrochat's decoder: ~30%
+ * of core 1 natively, 55-80% under ASan). Those builds are for finding
+ * memory bugs, so they run app code at full speed unless --cpu chip asks. */
+#if defined(__SANITIZE_ADDRESS__)
+#define CPU_SANITIZED 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define CPU_SANITIZED 1
+#endif
+#endif
+#ifndef CPU_SANITIZED
+#define CPU_SANITIZED 0
+#endif
+
 #define NOINSTR __attribute__((no_instrument_function, no_sanitize("address", "undefined")))
 
 /* The chip. Arm rates the Cortex-M33 at 4.09 CoreMark/MHz with its own
@@ -74,16 +89,26 @@ static cpu_core_t s_cpu[2];
 static unsigned   s_core;                  /* which core the host thread is running */
 static __thread int t_main;                /* the emulator's thread (not SDL's audio thread) */
 static bool       s_on;                    /* hooks live */
-static bool       s_throttle = true;       /* --cpu chip */
+static bool       s_throttle = !CPU_SANITIZED;   /* --cpu chip */
+static bool       s_mode_given;            /* --cpu on the command line */
 static double     s_fixed_k;               /* --cpu-factor */
 static double     s_host_cm;               /* CoreMark iterations/s of this build on this PC */
 static double     s_k;                     /* chip ns per host ns of app code */
 static uint32_t   s_sys_hz;
 static uint64_t   s_start_ns;
+static uint64_t   s_win_ns;                /* when the current perf window began */
 static bool       s_warned_slow;
 static bool       s_announce;              /* say the factor once the app has set its clock */
+static double     s_hook_ns;               /* the hooks' own share of each app stretch, measured */
+static bool       s_measuring;             /* emu_cpu_init() timing the hooks themselves */
+static uint64_t   s_meas_ns;
+static unsigned   s_meas_n;
 
-__attribute__((weak)) const int fw2_emu_psram_app = 0;   /* 1 from fw2_psram_app() */
+extern const int fw2_emu_psram_app;                     /* app_flags.c */
+
+/* The -finstrument-functions hooks, defined below. */
+NOINSTR void __cyg_profile_func_enter(void *fn, void *site);
+NOINSTR void __cyg_profile_func_exit(void *fn, void *site);
 
 static NOINSTR uint64_t clk(void) {
     struct timespec ts;
@@ -185,6 +210,9 @@ static void announce(void) {
     } else if (s_throttle) {
         emu_log("cpu: app code runs at the RP2350's speed at %u MHz (this PC is %.0fx as fast; "
                 "--cpu host runs it at full speed)", mhz, s_k);
+    } else if (CPU_SANITIZED && !s_mode_given) {
+        emu_log("cpu: sanitizer build: app code runs at this PC's full speed, as the sanitizers' checks "
+                "would skew the chip-speed estimate (--cpu chip slows it anyway)");
     } else {
         emu_log("cpu: app code runs at this PC's full speed, %.0fx the RP2350's at %u MHz (--cpu host)",
                 s_k, mhz);
@@ -204,6 +232,7 @@ bool emu_cpu_set_mode(const char *mode) {
     if (!strcmp(mode, "chip")) s_throttle = true;
     else if (!strcmp(mode, "host")) s_throttle = false;
     else return false;
+    s_mode_given = true;
     return true;
 }
 
@@ -229,17 +258,40 @@ void emu_cpu_init(uint32_t sys_hz) {
     if (fw2_emu_psram_app && s_throttle && s_k > 1.0)
         emu_log("cpu: on the board this app's code and data are in PSRAM, behind a 16 KB cache; the "
                 "emulator doesn't model cache misses, so the board can be slower than this");
-    s_start_ns = clk();
-    s_cpu[0].depth = 1;                    /* we're in the emulator's main() */
+    /* The hooks' own cost per app stretch: leave for app code and come
+     * straight back, many times; the quickest batch is the overhead. */
+    s_cpu[0].depth = 1;
     s_on = true;
+    s_measuring = true;
+    double best = 1e18;
+    for (int b = 0; b < 20; b++) {
+        s_meas_ns = 0;
+        s_meas_n = 0;
+        for (int i = 0; i < 200; i++) {
+            __cyg_profile_func_exit(NULL, NULL);
+            __cyg_profile_func_enter(NULL, NULL);
+        }
+        double m = (double)s_meas_ns / s_meas_n;
+        if (m < best) best = m;
+    }
+    s_measuring = false;
+    s_hook_ns = best;
+    if (emu_verbose) emu_log("cpu: the timing hooks cost %.0f ns an app stretch, left out of it", s_hook_ns);
+    s_cpu[0].app_since = 0;
+    s_start_ns = s_win_ns = clk();         /* we're in the emulator's main() (depth 1) */
 }
 
 /* ------------------------------------------------------------- accounting */
 static NOINSTR void charge(cpu_core_t *c, uint64_t host_ns) {
-    double chip = (double)host_ns * s_k;
+    /* Part of every stretch is the hooks' own work -- reading the clock
+     * last thing on the way out and first thing on the way back in, which
+     * in a browser is a call out to JavaScript. That isn't app code. */
+    double h = (double)host_ns - s_hook_ns;
+    if (h <= 0) return;
+    double chip = h * s_k;
     c->busy_ns += chip;
     c->seen = true;
-    if (s_throttle && s_k > 1.0) c->debt_ns += chip - (double)host_ns;
+    if (s_throttle && s_k > 1.0) c->debt_ns += chip - h;
 }
 
 static NOINSTR void pay(cpu_core_t *c) {
@@ -265,6 +317,7 @@ NOINSTR void __cyg_profile_func_enter(void *fn, void *site) {
     if (!s_on || !t_main) return;
     cpu_core_t *c = &s_cpu[s_core];
     if (c->depth++ != 0) return;
+    if (s_measuring) { s_meas_ns += clk() - c->app_since; s_meas_n++; return; }
     if (c->app_since) charge(c, clk() - c->app_since);
     if (!c->cb && !c->paying && c->debt_ns >= PAY_NS) pay(c);
 }
@@ -308,6 +361,7 @@ void emu_cpu_launch(unsigned core) {
 int emu_cpu_perf(char *out, size_t cap, double span_ns) {
     if (s_announce && clk() - s_start_ns >= 2000000000ull) announce();   /* the app kept the SDK's clock */
     if (s_k <= 0 || span_ns <= 0) return 0;
+    s_win_ns = clk();
     int n = 0;
     for (unsigned i = 0; i < 2; i++) {
         cpu_core_t *c = &s_cpu[i];
@@ -315,6 +369,9 @@ int emu_cpu_perf(char *out, size_t cap, double span_ns) {
         c->win_busy_ns = c->busy_ns;
         if (load > c->peak) c->peak = load;
         if (!c->seen) continue;
+        /* Throttled, a long stretch is charged when it ends, so a window can
+         * briefly read over 100%: that's still just "all of it". */
+        if (load > 1.0 && s_throttle) load = 1.0;
         if (load > 1.0)                    /* --cpu host: more than the chip could do */
             n += snprintf(out + n, cap - (size_t)n, "%sCPU%u >100%%", n ? "  " : "", i);
         else
@@ -328,13 +385,20 @@ void emu_cpu_report(void) {
     static bool done;
     if (done || !s_on || s_k <= 0) return;
     done = true;
-    double wall = (double)(clk() - s_start_ns);
+    uint64_t now = clk();
+    double wall = (double)(now - s_start_ns);
     if (wall < 1e9) return;
     unsigned mhz = (unsigned)((s_sys_hz + 500000u) / 1000000u);
+    double tail = (double)(now - s_win_ns);    /* since the last perf window */
     for (unsigned i = 0; i < 2; i++) {
         cpu_core_t *c = &s_cpu[i];
         if (!c->seen) continue;
+        if (tail >= 2e8) {                     /* a fifth of a second or more counts as a window */
+            double load = (c->busy_ns - c->win_busy_ns) / tail;
+            if (load > c->peak) c->peak = load;
+        }
         double avg = c->busy_ns / wall;
+        if (s_throttle && c->peak > 1.0) c->peak = 1.0;
         if (c->peak > 1.0)
             emu_log("cpu: core %u ran more app code than the RP2350 at %u MHz could (--cpu host): it would "
                     "have been busy all the time", i, mhz);

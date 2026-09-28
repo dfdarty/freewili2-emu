@@ -76,7 +76,9 @@ summary:
 ```
 
 A core near 100% is the bottleneck: the app can't do more per second on the
-board. `--cpu host` runs app code at your PC's full speed, as before (the
+board. The load counts app code only, so a loop that spins while it waits
+(`for (;;) { poll(); tight_loop_contents(); }`) reads low here, although it
+keeps the real core busy all the time; how low depends on the build. `--cpu host` runs app code at your PC's full speed, as before (the
 load is still estimated; `>100%` means more than the chip could do), and
 `--cpu-factor F` sets the speed ratio instead of measuring it.
 
@@ -101,6 +103,12 @@ CoreMark does comes out faster or slower than it is. Things it leaves out:
   range the board will fall in.
 - The 4 CoreMark/MHz figure is Arm's, for its own compiler. It will be
   checked against a FREE-WILi 2 running the same apps.
+
+[Sanitizer builds](#sanitizers-fw2_emu_sanitize) run app code at full
+speed: their checks slow memory-heavy code far more than they slow the
+calibration, so the estimate would come out pessimistic (retrochat's
+decoder, about 30% of core 1 natively, shows 55–80% under ASan).
+`--cpu chip` slows it anyway.
 
 Scripts see the slowed app too: a test whose `wait`s were tuned at PC speed
 may need longer ones, which is the point. `--cpu host` gives the old

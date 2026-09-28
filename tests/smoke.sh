@@ -7,8 +7,9 @@
 # apps/<app>/test.expect) lists regexes the log must
 # match (one per line; a line starting with ! is a regex it must NOT match, and
 # "@sd PATH REGEX" checks a file the app left on its SD card).
-# Each app gets a fresh SD card folder, out/sdcard-<app>. Exit status is
-# non-zero if any app fails to start or crashes.
+# Each app gets a fresh SD card folder, out/sdcard-<app>. Extra emulator flags
+# for one app go in tests/scripts/<app>.args (or apps/<app>/test.args). Exit
+# status is non-zero if any app fails to start or crashes.
 #
 #   BUILD_DIR=build-asan CMAKE_ARGS="-DFW2_EMU_SANITIZE=ON" tests/smoke.sh
 set -euo pipefail
@@ -30,8 +31,10 @@ for s in tests/scripts/*.txt apps/*/test.txt; do
     fi
     [ -x "$build/bin/$app" ] || { echo "skip $app (not built)"; continue; }
     rm -rf "out/sdcard-$app"
+    extra=()
+    [ -f "${s%.txt}.args" ] && read -r -a extra < "${s%.txt}.args"
     if timeout 60 "$build/bin/$app" --headless --script "$s" --audio-out "out/$app.wav" \
-            --sdcard "out/sdcard-$app" > "out/$app.log" 2>&1; then
+            --sdcard "out/sdcard-$app" ${extra[@]+"${extra[@]}"} > "out/$app.log" 2>&1; then
         if [ -f "$exp" ]; then
             while IFS= read -r re; do
                 [ -z "$re" ] || [[ "$re" == \#* ]] && continue

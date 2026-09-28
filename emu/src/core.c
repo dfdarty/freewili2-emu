@@ -87,6 +87,8 @@ EMU_NOINSTR const char *__asan_default_options(void) { return "abort_on_error=0:
 #endif
 
 int fw2_emu_app_main(void);
+void board_init_psram(void);                      /* WiliBSP, bsp/platform/board.c */
+extern const int fw2_emu_psram_app;               /* 1 in fw2_psram_app() builds (app_flags.c) */
 bool emu_touch_get(int *x, int *y);
 void emu_touch_task(void);
 extern const unsigned char fw2app_uf2_info[];
@@ -677,6 +679,14 @@ int main(int argc, char **argv) {
      * models are up, so nothing else is starting in the background. */
     emu_cpu_init(clock_get_hz(clk_sys));
     int saved = emu_cpu_app_begin(false);
+    if (fw2_emu_psram_app) {
+        /* On the board a fw2_psram_app() image starts in WiliBSP's
+         * fw2_psram_bootstrap(), which runs board_init_psram() -- 250 MHz,
+         * PSRAM timing, peripherals -- before main(); the app's own
+         * board_init() then takes the inherited path. */
+        emu_log("PSRAM app: board_init_psram() runs before main(), as WiliBSP's PSRAM start-up does");
+        board_init_psram();
+    }
     int rc = fw2_emu_app_main();
     emu_cpu_app_end(saved, false);
     char why[48];

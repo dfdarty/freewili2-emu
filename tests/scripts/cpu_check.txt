@@ -1,4 +1,5 @@
 # cpu_check: app code takes the chip's time (see the app).
+# --cpu chip (cpu_check.args): sanitizer builds run at full speed by default, and this checks the slowing itself.
 wait 2000                  # board_init and the power-zone handshake
 expect "cc: (PASS|FAIL|SKIP)" 15000
 quit

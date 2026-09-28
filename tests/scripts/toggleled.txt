@@ -1,6 +1,7 @@
 # toggleled: MAIN-CPU GPIO 25 toggled every 500 ms over OneWili, VIO = 3.3 V.
 # Probe the header every 125 ms for a second: both levels must show up.
-wait 2500
+expect "toggleled: link up" 20000
+wait 500
 header
 wait 125
 header

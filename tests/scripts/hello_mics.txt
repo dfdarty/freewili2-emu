@@ -2,6 +2,6 @@
 # A 1 kHz tone reaches only mic C (rightmost), so only its meter moves.
 set mics 0 0 1 0          # pickup: mic A, B, C, D
 set tone 1000             # level defaults to 8000 (a comment must not zero it)
-wait 1500
+expect "mic C: rms= 1[34][0-9][0-9]" 20000   # the meters once the filters settle
 screenshot out/hello_mics.png
 quit

@@ -19,10 +19,23 @@ change that would break a v1 workflow gets a new major version.
 - The device's bottom edge and `--perf` show each core's load (`CPU0 45%`),
   and a run ends with each core's average and peak.
 
+- `tests/smoke.sh` passes extra emulator flags to one app from
+  `tests/scripts/<app>.args` (or `apps/<app>/test.args`).
+
 ### Changed
 - Tests run at the chip's speed too, so an app too slow for the board is too
   slow in its test. A script tuned at PC speed may need longer `wait`s, or
-  `--cpu host`.
+  `--cpu host`. Sanitizer builds run app code at full speed unless given
+  `--cpu chip`: their checks would skew the estimate.
+- The smoke scripts for hello_charger, hello_keyboard, hello_mics,
+  hello_psram_exec, hello_vref and toggleled wait for the app's output
+  instead of a fixed time.
+
+### Fixed
+- A `fw2_psram_app()` app now starts as on the board: WiliBSP's PSRAM
+  start-up runs `board_init_psram()` (250 MHz, PSRAM timing, peripherals)
+  before `main()`. hello_psram_exec, which never calls `board_init()`, ran
+  at the SDK's 150 MHz before.
 
 ## [1.2.0] — 2026-09-28
 

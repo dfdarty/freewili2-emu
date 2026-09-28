@@ -126,6 +126,7 @@ add_library(freewili2_bsp STATIC
     emu/src/skin.c
     emu/src/stub_dvi.c
     emu/src/cpu.c
+    emu/src/app_flags.c
     # --- CoreMark's workload, unmodified: cpu.c's speed calibration ---
     third_party/coremark/core_list_join.c
     third_party/coremark/core_matrix.c

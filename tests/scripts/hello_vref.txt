@@ -1,6 +1,8 @@
 # hello_vref: VREF sweep measured on the display ADC, then MAIN-CPU GPIO 25
 # toggled every 2 s over OneWili and read back with read_all.
-wait 7000
+expect "hello_vref: link up" 20000
+expect "GPIO 25 = 1 " 10000
+expect "GPIO 25 = 0 " 10000
 header
 screenshot out/hello_vref.png
 quit

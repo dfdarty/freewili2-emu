@@ -1,4 +1,7 @@
 # hello_charger: charger / USB-C status from the board-manager status frames.
-wait 3000
+# Timeouts are generous: app code runs at the chip's speed, and a sanitizer
+# build on a slow CI runner starts slowly.
+expect "hello_charger up" 20000
+wait 1500                   # a few status frames
 screenshot out/hello_charger.png
 quit
