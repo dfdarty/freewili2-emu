@@ -164,7 +164,7 @@ static const char *const TOWN[] = {
     "ap 00:25:DF:44:55:66 1 3 -74 AB3-X7K2",              /* Axon prefix, body-camera SSID */
     "ap AC:9F:C3:77:88:99 11 3 -66 Ring-8c1e",            /* Ring doorbell (Ring LLC prefix) */
     "ap 02:13:37:13:37:00 6 0 -61 Pineapple_1337",        /* a WiFi Pineapple's setup network */
-    "ap 90:9A:4A:55:66:78 149 0 -55 CoffeeShop",          /* same name, open: an evil twin */
+    "ap 94:83:C4:12:34:56 149 0 -55 CoffeeShop",          /* same name, another vendor, open: an evil twin */
     "ble 5C:F3:70:A1:B2:C3 -63 Galaxy Buds2",
     "ble 7D:4C:21:9E:0A:11 -77",
     "ble D4:3A:2C:10:20:30 -70 Flock-2291",
