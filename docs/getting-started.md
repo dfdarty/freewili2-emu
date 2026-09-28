@@ -123,7 +123,8 @@ docker run --rm -p 127.0.0.1:8080:80 freewili2-emu     # open http://127.0.0.1:8
 To put your own apps on the page too, list their repositories in
 `EXTRA_APPS`: Git URLs separated by spaces, each optionally ending in
 `#branch` or `#tag`. Each repository needs its app's `CMakeLists.txt` at the
-top, like one made with [`fw2emu new --repo`](first-app.md).
+top, like one made with [`fw2emu new --repo`](first-app.md). Its Git
+submodules come too.
 
 ```sh
 docker build -t freewili2-emu \

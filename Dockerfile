@@ -49,7 +49,7 @@ RUN set -eu; \
         git -C third_party/wilibsp/libs/onewili fetch --quiet --depth 1 "${ONEWILI_URL}" "${ONEWILI_REF}"; \
         git -C third_party/wilibsp/libs/onewili -c advice.detachedHead=false checkout --quiet FETCH_HEAD; \
     fi
-# Extra apps: each cloned into /apps/<repository name>.
+# Extra apps: each cloned into /apps/<repository name>, with its submodules.
 RUN set -eu; \
     dirs=""; \
     for spec in ${EXTRA_APPS}; do \
@@ -57,7 +57,7 @@ RUN set -eu; \
         case "$spec" in *'#'*) ref="${spec#*#}";; esac; \
         dir="/apps/$(basename "$url" .git)"; \
         echo "extra app: $url${ref:+ at $ref} -> $dir"; \
-        git clone --quiet --depth 1 ${ref:+--branch "$ref"} "$url" "$dir"; \
+        git clone --quiet --depth 1 --recurse-submodules --shallow-submodules ${ref:+--branch "$ref"} "$url" "$dir"; \
         [ -f "$dir/CMakeLists.txt" ] || { echo "$url has no CMakeLists.txt at the top" >&2; exit 1; }; \
         dirs="${dirs:+$dirs;}$dir"; \
     done; \
