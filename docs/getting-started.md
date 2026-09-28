@@ -141,7 +141,10 @@ services:
         EXTRA_APPS: "https://github.com/you/my-app.git"
 ```
 
-Rebuild the image to pick up new commits to those apps.
+Docker caches the step that fetches them, so an ordinary rebuild keeps the
+versions it already has. When an app gets new commits, rebuild without the
+cache (`docker compose build --no-cache fw2-emu`), or point `EXTRA_APPS` at
+a new tag, which changes the step and fetches again.
 
 ## Next
 
