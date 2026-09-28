@@ -137,7 +137,7 @@ In a Compose file that builds from the Git URL:
 services:
   fw2-emu:
     build:
-      context: https://github.com/dfdarty/freewili2-emu.git#v1
+      context: https://github.com/dfdarty/freewili2-emu.git#v2
       args:
         EXTRA_APPS: "https://github.com/you/my-app.git"
 ```

@@ -76,7 +76,7 @@ environment. VS Code tasks and a debug setup come with it. See [Install and run]
   both cores. The radios are next. [Details](https://dfdarty.github.io/freewili2-emu/compatibility/).
 - WiliBSP's `fw.py press / touch / type / screenshot` work against it over RTT,
   for apps that call `agentio_init()` (as on the board).
-- A GitHub Action for your own app repository (`uses: dfdarty/freewili2-emu@v1`):
+- A GitHub Action for your own app repository (`uses: dfdarty/freewili2-emu@v2`):
   every push builds the app, runs its test script headless and keeps the
   screenshots ([Testing in CI](https://dfdarty.github.io/freewili2-emu/ci/)).
 - `fw2emu hwcheck` builds your app with the real Pico SDK and Arm GCC and

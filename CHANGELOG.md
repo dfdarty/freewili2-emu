@@ -1,10 +1,20 @@
 # Changelog
 
 What changed in each release of freewili2-emu. The GitHub Action follows
-releases: `uses: dfdarty/freewili2-emu@v1` picks up every 1.x release, and a
-change that would break a v1 workflow gets a new major version.
+releases: `uses: dfdarty/freewili2-emu@v2` picks up every 2.x release, and a
+change that would break a v2 workflow gets a new major version. `@v1` stays
+at 1.2.0.
 
 ## [Unreleased]
+
+## [2.0.0] — 2026-09-28
+
+### Breaking
+- App code runs at the RP2350's speed, in tests too (below). An app that is
+  too slow for the board is now too slow in its test, and a script whose
+  fixed `wait`s were tuned at PC speed may need longer ones — better, an
+  `expect` on the output it waits for. To upgrade, change `@v1` to `@v2`;
+  `args: --cpu host` keeps the old speed where a test needs it.
 
 ### Added
 - App code runs at the RP2350's speed. Each core's app code (interrupt
@@ -117,7 +127,8 @@ The first release.
 - Ctrl+C ends a run cleanly: a recording or `--audio-out` file is still
   written.
 
-[Unreleased]: https://github.com/dfdarty/freewili2-emu/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/dfdarty/freewili2-emu/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/dfdarty/freewili2-emu/compare/v1.2.0...v2.0.0
 [1.2.0]: https://github.com/dfdarty/freewili2-emu/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/dfdarty/freewili2-emu/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/dfdarty/freewili2-emu/releases/tag/v1.0.0
