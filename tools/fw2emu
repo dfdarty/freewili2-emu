@@ -378,7 +378,13 @@ def stack_budget(elf, mem, stack):
             msgs.append("error", f"core 0 stack {need} B does not fit between static RAM (ends 0x{floor:08x}) "
                         f"and the stack top 0x{top0:08x} ({gap} B)")
         hl = mem["ram"]["heap_limit"]
-        if stack.get("uses_malloc") and hl > top0:
+        # An app that defines _sbrk itself (a strong symbol; the SDK's is weak)
+        # decides where malloc's heap lives -- in PSRAM, say -- so the SDK's
+        # __StackLimit doesn't bound it and the warning below doesn't apply.
+        own_sbrk = any(y["name"] == "_sbrk" and y["bind"] == 1 and y["type"] == 2 for y in elf.symbols)
+        if stack.get("uses_malloc") and own_sbrk:
+            msgs.append("note", "malloc grows through the app's own _sbrk, not the SDK's")
+        elif stack.get("uses_malloc") and hl > top0:
             if status == "ok":
                 status = "warn"
             msgs.append("warn", f"malloc (the SDK's _sbrk) may grow up to __StackLimit 0x{hl:08x}, past the "
