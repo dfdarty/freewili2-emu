@@ -6,6 +6,13 @@ change that would break a v1 workflow gets a new major version.
 
 ## [Unreleased]
 
+### Added
+- Wi-Fi and Bluetooth scans: `ow_wireless_wifi_on_scan_for_access_points()`
+  and `ow_wireless_bluetooth_le_on_scan_bt_devices()` report a scene of
+  virtual networks and devices as `wifiscan` / `btscan` events. Scenes come
+  from `--radio FILE`, the built-in `--radio @town`, or the script `radio`
+  command.
+
 ## [1.1.0] — 2026-09-27
 
 ### Added

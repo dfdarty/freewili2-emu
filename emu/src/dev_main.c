@@ -528,6 +528,14 @@ static void run_command(char *line) {
         if (!arg_long(&cur, &src) || src < 0 || src > 4) { respond(path, false, "Invalid argument"); return; }
         if (emu_verbose) emu_log("main: i\\g\\v %ld is carried out by the display firmware, not by a WiliBSP app", src);
         respond(path, true, "Ok");
+    } else if (!strcmp(path, "w\\w\\s")) {
+        emu_radio_wifi_scan(now_us());          /* results follow as wifiscan events */
+        respond(path, true, "Ok");
+    } else if (!strcmp(path, "w\\b\\s")) {
+        long ms;
+        if (!arg_long(&cur, &ms) || ms <= 0) { respond(path, false, "Invalid argument"); return; }
+        emu_radio_ble_scan(now_us(), ms);       /* results follow as btscan events */
+        respond(path, true, "Ok");
     } else if (!strcmp(path, "h\\t")) {
         cmd_get_time(path);
     } else if (!strcmp(path, "h\\c")) {
@@ -1113,6 +1121,15 @@ static bool parse_frame(double *ready) {
  * (virtual) clock, stopping while a reply is still being written out. */
 static void main_service(double now) {
     tx_pump(now);
+    char ev[160];                                     /* scan results, one event at a time */
+    const char *name;
+    while (!tx_pending() && (name = emu_radio_poll(now, ev, sizeof ev)) != NULL) {
+        char path[16];
+        snprintf(path, sizeof path, "*%s", name);     /* framed like a reply: [*name ts seq fields 1] */
+        respond(path, true, "%s", ev);
+        M.tx_not_before = M.tx_not_before > now ? M.tx_not_before : now;
+        tx_pump(now);
+    }
     if (M.stream_ms && now >= M.stream_next) {
         if (!tx_pending()) send_gpio_report();
         M.stream_next += M.stream_ms * 1000.0;

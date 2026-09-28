@@ -1,6 +1,11 @@
 # main_link_check: emulator self-test of the MAIN-CPU link (SD, GPIO, Vout).
-# Header GPIO 9 is driven high from outside before the checks run.
+# Header GPIO 9 is driven high from outside before the checks run, and two
+# networks and two Bluetooth devices are in range.
 set gpio9 1
+radio ap 3C:37:86:12:34:56 6 3 -52 NETGEAR42
+radio ap 44:D9:E7:AB:CD:02 36 7 -70 Home Net 5G
+radio ble 5C:F3:70:A1:B2:C3 -63 Galaxy Buds2
+radio ble 7D:4C:21:9E:0A:11 -77
 expect "main_link_check: [0-9]+ checks, 0 failed" 15000
 screenshot out/main_link_check.png device
 quit

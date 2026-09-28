@@ -81,6 +81,14 @@ bool emu_core_irqs_off(unsigned core);             /* that core's PRIMASK */
 bool emu_in_service(void);                         /* inside emu_poll's device servicing */
 bool emu_set_board_id(const char *hex16);          /* --board-id */
 bool emu_set_rtc(const char *when);               /* --rtc "YYYY-MM-DD HH:MM:SS" */
+
+/* The ESP32-C5's scans as MAIN reports them (dev_radio.c): a scene of
+ * virtual access points and Bluetooth devices. */
+const char *emu_radio_line(const char *line);     /* "ap ..." / "ble ..." / "remove MAC" / "rssi MAC dBm" / "clear"; error or NULL */
+const char *emu_radio_load(const char *path);     /* --radio FILE, or "@town"; error or NULL */
+void emu_radio_wifi_scan(double now_us);
+void emu_radio_ble_scan(double now_us, long ms);
+const char *emu_radio_poll(double now_us, char *out, size_t cap);   /* event name + fields, or NULL */
 void emu_irq_raise_core(unsigned core, unsigned irq); /* a per-core source (SIO FIFO, doorbell) */
 void emu_irq_deliver_pending(void);                /* run IRQs held for the current core */
 

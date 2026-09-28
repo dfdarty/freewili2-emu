@@ -21,6 +21,7 @@ unmodified.
 | Header GPIO | pins 8–17 and 25–27: drive, toggle, PWM, read back, stream | `ow_io_gpio_set_io_high/low/toggle`, `set_pwm`, `read_all`, `stream_io` (gpioReport binary events) |
 | Header supply (VIO) | the rail chosen with `ioexp_vref()` on the display side, as the display's ADC monitor reads it | `ioexp_vref()`, `adc_read()` on inputs 5 (VIO) and 1 (Vout) |
 | Programmable Vout | on/off and 1.0–5.5 V; the ANALOG power zone must be on | `ow_io_analog_out_set_v_prog_vout` |
+| Wi-Fi and Bluetooth scans | the stock ESP32-C5 firmware's scans, over a scene of virtual networks and devices ([below](#wi-fi-and-bluetooth-scans)) | `ow_wireless_wifi_on_scan_for_access_points`, `ow_wireless_bluetooth_le_on_scan_bt_devices` (wifiscan / btscan text events) |
 | Power-zone refusals | `EPOWERZONE` for GPIO/analog commands, once the app has reported its zones | `ow_fwgui_send_power_zones` |
 | Anything else | a well-formed failure reply: the call returns `OW_ERR_FAILED` at once instead of timing out after 5 s | the other ~480 generated commands |
 
@@ -196,14 +197,64 @@ Both calls are generated text commands, so they need about 10 KB of stack
 (see below): use them from an app built with `fw2_psram_app()`, whose stack
 has the SRAM to itself.
 
+## Wi-Fi and Bluetooth scans
+
+The radios are on the ESP32-C5, behind MAIN. An app asks MAIN for a scan
+and the results come back as text events, which `ow_poll_text_line()`
+returns one at a time:
+
+| Call | Then, for each network or device |
+|---|---|
+| `ow_wireless_wifi_on_scan_for_access_points(&dev)` | `wifiscan`: `<bssid> <rssi> <channel> <band> <authmode> <ssid>` |
+| `ow_wireless_bluetooth_le_on_scan_bt_devices(&dev, ms)` | `btscan`: `<name> <mac> <rssi>` |
+
+Events are framed like replies, so the `args` that `ow_poll_text_line()`
+gives you are `<timestamp> <sequence> <fields…> <ok>`: skip the first two
+words and drop the last. An SSID or a device name can contain spaces or be
+empty, so split a `wifiscan` from the front (the SSID is last) and a
+`btscan` from the back (the name is first). Poll often: the client keeps
+only the last 8 events it hasn't been asked for.
+
+What's in range is a scene of virtual access points and devices:
+
+```text
+# ap  BSSID              channel  authmode  RSSI  SSID
+ap    3c:37:86:12:34:56  6        3         -52   NETGEAR42
+ap    44:d9:e7:ab:cd:02  36       7         -71   Hernandez Family 5G
+# ble MAC                RSSI  [name]
+ble   5c:f3:70:a1:b2:c3  -63   Galaxy Buds2
+ble   7d:4c:21:9e:0a:11  -77
+```
+
+Load one with `--radio scene.txt`, or `--radio @town` for a built-in
+neighbourhood with a few things a surveillance detector would flag. A
+script (or the web page's command line) changes it while the app runs:
+`radio ap …`, `radio ble …`, `radio rssi MAC -40` (walk towards it),
+`radio remove MAC`, `radio clear`, `radio load FILE`.
+
+Each scan reports everything in the scene once, with up to ±3 dB of jitter
+from a fixed seed, so a test gets the same numbers every run. A Wi-Fi scan
+takes 1.2 s; a Bluetooth scan spreads its results over the time you asked
+for.
+
+Modelled from WiliBSP's generated client, the upstream OneWili docs and the
+Python client's framing; not yet checked against a board:
+- `band` is `2` or `5` (GHz) and `authmode` is ESP-IDF's `wifi_auth_mode_t`
+  (0 open, 1 WEP, 3 WPA2-PSK, 6 WPA3-PSK, 7 WPA2/WPA3, …).
+- The upstream docs say both scans need power zone 5 (ESP32), which a
+  WiliBSP app has no `POWER_ZONES` name for; the emulator doesn't refuse
+  them.
+- The scans report what the stock firmware reports: no advertisement data,
+  no raw frames, and only access points, not the devices talking to them.
+
 ## Checking it
 
 - `-v` logs every OneWili response (`main: [i\g\t 00000001F681D880 3 Ok 1]`),
   GPIO changes, VREF and Vout. `-vv` also logs each SD request.
 - `tests/apps/main_link_check` is a self-test built next to the example
-  apps. It runs 60 checks through the unmodified client: every SD operation
+  apps. It runs 67 checks through the unmodified client: every SD operation
   and its errors, GPIO, PWM, streamed reports, Vout, the board clock,
-  `EPOWERZONE` and an unmodelled command.
+  Wi-Fi and Bluetooth scans, `EPOWERZONE` and an unmodelled command.
 - `fw2emu hwcheck` builds the app for the board. Note that every OneWili
   text command (`ow_io_gpio_*`, `ow_io_analog_*`, …) keeps about 10 KB of
   buffers on the stack. That is more than both 4 KB scratch banks, so
@@ -216,8 +267,8 @@ has the SRAM to itself.
 ## Limits
 
 - **Not modelled:** CAN, analog inputs, the UART/I2C/SPI/MDIO bridges, the
-  FPGA and logic analyzer, radios, NFC, WILEye, the MAIN-side GUI, and MAIN
-  rebooting on its own. These commands return the failure reply described
+  FPGA and logic analyzer, the radios beyond the Wi-Fi and Bluetooth scans,
+  NFC, WILEye, the MAIN-side GUI, and MAIN rebooting on its own. These commands return the failure reply described
   above. The emulator names each one in its log the first time an app uses
   it.
 - `i\g\v` (`ow_io_gpio_set_io_voltage_source`) answers `Ok` but changes

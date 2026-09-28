@@ -120,6 +120,7 @@ add_library(freewili2_bsp STATIC
     emu/src/dev_audio.c
     emu/src/dev_pdm.c
     emu/src/dev_main.c
+    emu/src/dev_radio.c
     emu/src/rtt.c
     emu/src/script.c
     emu/src/skin.c

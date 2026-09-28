@@ -17,6 +17,7 @@ word where a number should be, too many arguments — stops the run with
 | `drag X1 Y1 X2 Y2 [MS]` | swipe (default 300 ms) |
 | `set NAME V [V V V]` | change a sensor or the room sound (table below) |
 | `play FILE [loop] [step]` / `play stop` | play a time-stamped sensor log (CSV, or `@launch`) from now; see [Playing a sensor log](sensors-and-sound.md#playing-a-sensor-log) |
+| `radio LINE` / `radio load FILE` | change the Wi-Fi networks and Bluetooth devices in range, or load a scene (`@town` is built in); see [Wi-Fi and Bluetooth scans](main-link.md#wi-fi-and-bluetooth-scans) |
 | `screenshot FILE [lcd\|device]` | PNG of the 480x320 LCD, or the whole front panel |
 | `log TEXT` | print a marker |
 | `header` | log the MAIN CPU's GPIO header: each pin's level, VIO and Vout ([MAIN link](main-link.md#header-gpio-and-vio)) |

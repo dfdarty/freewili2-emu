@@ -545,6 +545,7 @@ static void usage(void) {
         "  --mic-wav WAV       sound reaching the microphones (looped)\n"
         "  --mute              don't play audio through the PC\n"
         "  --board-id HEX16    the RP2350's 64-bit unique id (default E6616408432A7B15)\n"
+        "  --radio FILE        Wi-Fi networks and Bluetooth devices in range (a scene file, or @town)\n"
         "  --rtc WHEN          the board clock at start, \"2027-05-16 09:30:00\" (default: the PC's local time)\n"
         "  --sensor-csv FILE   play a sensor log (CSV, or @launch for the built-in rocket flight)\n"
         "  --record FILE       write what you do (keys, clicks, touches) as an input script\n"
@@ -569,6 +570,7 @@ int main(int argc, char **argv) {
     const char *script = NULL;
     const char *sdcard = NULL;
     const char *sensor_csv = NULL;
+    const char *radio = NULL;
     const char *record = NULL;
 
     for (int i = 1; i < argc; i++) {
@@ -589,6 +591,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--perf")) s_perf_log = true;
         else if (!strcmp(a, "--record") && i + 1 < argc) record = argv[++i];
         else if (!strcmp(a, "--sensor-csv") && i + 1 < argc) sensor_csv = argv[++i];
+        else if (!strcmp(a, "--radio") && i + 1 < argc) radio = argv[++i];
         else if (!strcmp(a, "--board-id") && i + 1 < argc) {
             if (!emu_set_board_id(argv[++i])) { fprintf(stderr, "bad --board-id %s (16 hex digits)\n", argv[i]); return 2; }
         }
@@ -647,6 +650,10 @@ int main(int argc, char **argv) {
     emu_audio_enable_host(!s_headless && !s_mute);
     if (script) emu_script_load(script);
     if (record) emu_rec_start(record);
+    if (radio) {
+        const char *err = emu_radio_load(radio);
+        if (err) { fprintf(stderr, "--radio %s\n", err); return 2; }
+    }
     if (sensor_csv) {
         const char *err = emu_sensor_play(sensor_csv, false, false);
         if (err) { fprintf(stderr, "--sensor-csv %s\n", err); return 2; }

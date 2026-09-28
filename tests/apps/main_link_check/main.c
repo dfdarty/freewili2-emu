@@ -144,6 +144,56 @@ static void clock_checks(void) {
     check(ow_hardware_set_time(&dev, 2027, 13, 1, 0, 0, 0) == OW_ERR_FAILED, "month 13 is refused");
 }
 
+/* ------------------------------------------------- Wi-Fi and BLE scans */
+/* An event's fields: after "<ts> <seq> ", before " <ok>". */
+static char *event_fields(char *args) {
+    char *p = strchr(args, ' ');
+    p = p ? strchr(p + 1, ' ') : NULL;
+    if (!p) return NULL;
+    size_t n = strlen(++p);
+    if (n >= 2 && p[n - 2] == ' ' && (p[n - 1] == '0' || p[n - 1] == '1')) p[n - 2] = 0;
+    return p;
+}
+
+/* The script puts two networks and two devices in range (one nameless). */
+static void radio_checks(void) {
+    char id[24], args[200];
+    int wifi = 0, ble = 0;
+    bool home = false, nameless = false;
+    check(ow_wireless_wifi_on_scan_for_access_points(&dev) == OW_OK, "Wi-Fi scan starts");
+    absolute_time_t end = make_timeout_time_ms(1800);
+    while (!time_reached(end)) {
+        while (ow_poll_text_line(&dev, id, sizeof id, args, sizeof args) == 1) {
+            char *f = event_fields(args);
+            if (strcmp(id, "wifiscan") || !f) continue;
+            wifi++;
+            char bssid[20], ssid[40];
+            int rssi, ch, band, auth;
+            if (sscanf(f, "%19s %d %d %d %d %39[^\n]", bssid, &rssi, &ch, &band, &auth, ssid) == 6 &&
+                !strcmp(bssid, "44:d9:e7:ab:cd:02") && ch == 36 && band == 5 && auth == 7 &&
+                !strcmp(ssid, "Home Net 5G") && rssi <= -67 && rssi >= -73)
+                home = true;
+        }
+        sleep_ms(2);
+    }
+    checkf(wifi == 2, "wifiscan events, one per network (%ld)", wifi, 0);
+    check(home, "a wifiscan record: BSSID, RSSI, channel, band, auth, SSID with spaces");
+    check(ow_wireless_bluetooth_le_on_scan_bt_devices(&dev, 400) == OW_OK, "BLE scan starts");
+    end = make_timeout_time_ms(700);
+    while (!time_reached(end)) {
+        while (ow_poll_text_line(&dev, id, sizeof id, args, sizeof args) == 1) {
+            char *f = event_fields(args);
+            if (strcmp(id, "btscan") || !f) continue;
+            ble++;
+            if (!strncmp(f, " 7d:4c:21:9e:0a:11 ", 19)) nameless = true;   /* no name: empty, then the MAC */
+        }
+        sleep_ms(2);
+    }
+    checkf(ble == 2, "btscan events, one per device (%ld)", ble, 0);
+    check(nameless, "a nameless device's btscan has an empty name");
+    check(ow_wireless_bluetooth_le_on_scan_bt_devices(&dev, -1) == OW_ERR_FAILED, "a negative BLE scan time is refused");
+}
+
 /* ---------------------------------------------------------------- GPIO */
 static uint32_t read_all(void) {
     uint32_t v = 0;
@@ -248,6 +298,7 @@ int main(void) {
     sd_checks();
     gpio_checks();
     clock_checks();
+    radio_checks();
 
     char line[64];
     snprintf(line, sizeof line, "%d CHECKS, %d FAILED", n_checks, n_failed);

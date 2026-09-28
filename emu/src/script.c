@@ -178,6 +178,16 @@ static void exec(char *line, uint64_t now) {
         exec_expect(line + 6, now, ln);
         return;
     }
+    if (!strncmp(line, "radio", 5) && (line[5] == ' ' || line[5] == '\t' || !line[5])) {
+        const char *rest = line + 5;                   /* free text: SSIDs and names have spaces */
+        while (*rest == ' ' || *rest == '\t') rest++;
+        const char *err = !strncmp(rest, "load ", 5) ? emu_radio_load(rest + 5) : emu_radio_line(rest);
+        if (err) {
+            if (s_from_web) emu_log("radio: %s", err);
+            else emu_fatal("script line %d: radio: %s", ln + 1, err);
+        }
+        return;
+    }
     char *save = NULL, *t[8] = { 0 };
     int n = 0;
     for (char *tok = strtok_r(line, " \t", &save); tok; tok = strtok_r(NULL, " \t", &save)) {
