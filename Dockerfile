@@ -7,6 +7,11 @@
 # Builds from a checkout with or without submodules, or straight from the Git
 # URL: WiliBSP (with its nested libs/onewili) and SDL are fetched at pinned
 # versions if they are not already present.
+#
+# Your own apps go on the page too: EXTRA_APPS is a space-separated list of
+# Git URLs, each optionally with #branch-or-tag, of repositories with a
+# fw2_display_app() CMakeLists.txt at the top:
+#   docker build --build-arg EXTRA_APPS="https://github.com/you/app.git#v2" .
 
 ARG EMSDK_VERSION=4.0.15
 
@@ -14,6 +19,7 @@ FROM emscripten/emsdk:${EMSDK_VERSION} AS build
 ARG SDL_TAG=release-2.32.8
 ARG WILIBSP_REPO=https://github.com/freewili/wilibsp.git
 ARG WILIBSP_REF=45ad1c219a4e225a51bfb406bbed20460e882f81
+ARG EXTRA_APPS=""
 
 # SDL2 source for Emscripten's SDL2 port (same version the port expects).
 RUN git clone --quiet --depth 1 --branch "${SDL_TAG}" https://github.com/libsdl-org/SDL.git /opt/SDL
@@ -43,7 +49,20 @@ RUN set -eu; \
         git -C third_party/wilibsp/libs/onewili fetch --quiet --depth 1 "${ONEWILI_URL}" "${ONEWILI_REF}"; \
         git -C third_party/wilibsp/libs/onewili -c advice.detachedHead=false checkout --quiet FETCH_HEAD; \
     fi
-RUN emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release && \
+# Extra apps: each cloned into /apps/<repository name>.
+RUN set -eu; \
+    dirs=""; \
+    for spec in ${EXTRA_APPS}; do \
+        url="${spec%%#*}"; ref=""; \
+        case "$spec" in *'#'*) ref="${spec#*#}";; esac; \
+        dir="/apps/$(basename "$url" .git)"; \
+        echo "extra app: $url${ref:+ at $ref} -> $dir"; \
+        git clone --quiet --depth 1 ${ref:+--branch "$ref"} "$url" "$dir"; \
+        [ -f "$dir/CMakeLists.txt" ] || { echo "$url has no CMakeLists.txt at the top" >&2; exit 1; }; \
+        dirs="${dirs:+$dirs;}$dir"; \
+    done; \
+    printf '%s' "$dirs" > /tmp/extra-apps
+RUN emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release "-DFW2_EMU_EXTRA_APPS=$(cat /tmp/extra-apps)" && \
     cmake --build build-web --parallel
 
 FROM nginx:1.27-alpine

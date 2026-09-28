@@ -120,6 +120,29 @@ docker build -t freewili2-emu .
 docker run --rm -p 127.0.0.1:8080:80 freewili2-emu     # open http://127.0.0.1:8080
 ```
 
+To put your own apps on the page too, list their repositories in
+`EXTRA_APPS`: Git URLs separated by spaces, each optionally ending in
+`#branch` or `#tag`. Each repository needs its app's `CMakeLists.txt` at the
+top, like one made with [`fw2emu new --repo`](first-app.md).
+
+```sh
+docker build -t freewili2-emu \
+  --build-arg EXTRA_APPS="https://github.com/you/my-app.git https://github.com/you/other-app.git#v2" .
+```
+
+In a Compose file that builds from the Git URL:
+
+```yaml
+services:
+  fw2-emu:
+    build:
+      context: https://github.com/dfdarty/freewili2-emu.git#v1
+      args:
+        EXTRA_APPS: "https://github.com/you/my-app.git"
+```
+
+Rebuild the image to pick up new commits to those apps.
+
 ## Next
 
 - [Write your first app](first-app.md)

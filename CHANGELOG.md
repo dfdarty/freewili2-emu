@@ -11,6 +11,8 @@ change that would break a v1 workflow gets a new major version.
 ### Added
 - The board clock: `ow_hardware_get_time()` and `ow_hardware_set_time()`
   work, starting at the PC's local time or at `--rtc "YYYY-MM-DD HH:MM:SS"`.
+- Docker: the `EXTRA_APPS` build argument puts apps from other Git
+  repositories on the web page, next to WiliBSP's examples.
 
 ## [1.0.0] — 2026-09-27
 
