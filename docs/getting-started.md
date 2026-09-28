@@ -67,10 +67,14 @@ tools/fw2emu run path/to/my_app --headless --script test.txt # emulator flags go
 ```
 
 !!! info "Other platforms"
-    Native builds are developed and tested on Ubuntu 24.04. **On Windows**,
-    use WSL2: [Windows (WSL2) and VS Code](windows.md) has the steps, and the
-    repository's VS Code tasks and debug setup. macOS is not tested. The
-    browser version works everywhere.
+    Native builds are developed and tested on Ubuntu 24.04, on x86-64 and on
+    64-bit Arm. **A Raspberry Pi 5** with 64-bit Raspberry Pi OS is a
+    complete development machine: the same `apt install` line, and
+    `tools/fw2emu hwcheck --fetch-toolchain` downloads the Arm toolchain
+    built for it, so the UF2 for the board is built on the Pi too. **On
+    Windows**, use WSL2: [Windows (WSL2) and VS Code](windows.md) has the
+    steps, and the repository's VS Code tasks and debug setup. macOS is not
+    tested. The browser version works everywhere.
 
 ## The browser build yourself
 

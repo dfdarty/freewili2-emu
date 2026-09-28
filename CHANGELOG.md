@@ -7,6 +7,11 @@ at 1.2.0.
 
 ## [Unreleased]
 
+### Added
+- CI builds and smoke-tests the emulator on 64-bit Arm Linux too, and runs
+  `hwcheck` there with the aarch64 Arm toolchain: a Raspberry Pi 5 works as
+  the development machine.
+
 ## [2.0.0] — 2026-09-28
 
 ### Breaking
