@@ -199,7 +199,7 @@ endif()
 foreach(_lib pico_stdlib hardware_uart hardware_gpio hardware_adc hardware_i2c
              hardware_spi hardware_dma hardware_pio hardware_pwm hardware_irq
              hardware_clocks hardware_timer hardware_sync pico_time
-             pico_multicore pico_unique_id pico_sync pico_util hardware_sync_spin_lock)
+             pico_multicore pico_unique_id pico_sync pico_util hardware_sync_spin_lock pico_rand)
     add_library(${_lib} INTERFACE)
     target_link_libraries(${_lib} INTERFACE freewili2_bsp)
 endforeach()

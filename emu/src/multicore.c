@@ -396,3 +396,27 @@ void pico_get_unique_board_id_string(char *id_out, uint len) {
         snprintf(id_out + n, 3, "%02X", s_board_id[i]);
     id_out[n] = '\0';
 }
+
+/* ======================================================= pico/rand.h */
+#include "pico/rand.h"
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+static void host_random(void *buf, size_t n) {
+    uint8_t *p = (uint8_t *)buf;
+    for (size_t i = 0; i < n; i++) p[i] = (uint8_t)(emscripten_random() * 256.0);
+}
+#else
+#include <sys/random.h>
+static void host_random(void *buf, size_t n) {
+    uint8_t *p = (uint8_t *)buf;
+    while (n) {
+        ssize_t got = getrandom(p, n, 0);
+        if (got <= 0) { for (; n; n--) *p++ = (uint8_t)rand(); break; }
+        p += got;
+        n -= (size_t)got;
+    }
+}
+#endif
+void get_rand_128(rng_128_t *r) { host_random(r, sizeof *r); }
+uint64_t get_rand_64(void) { uint64_t v; host_random(&v, sizeof v); return v; }
+uint32_t get_rand_32(void) { uint32_t v; host_random(&v, sizeof v); return v; }
