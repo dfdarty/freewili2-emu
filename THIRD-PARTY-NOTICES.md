@@ -11,6 +11,13 @@
     `*_program_init()` helpers follow the originals' `c-sdk` sections.
   - `cmake/fw2_emu_app.cmake` — mirrors the arguments and validation of
     `fw2_display_app()` / `fw2_psram_app()` in `bsp/CMakeLists.txt`.
+- **CoreMark** — `third_party/coremark`, Apache License 2.0, © EEMBC. An
+  unmodified copy of the benchmark's workload files (list, matrix, state,
+  CRC) from https://github.com/eembc/coremark at 1f483d5. The emulator runs
+  them for a moment at start-up to measure how fast the PC is, and slows app
+  code to the RP2350's speed from that (`emu/src/cpu.c`, which has its own
+  port header and driver in `emu/src/cpu/`). No CoreMark score is reported.
+  CoreMark is a trademark of EEMBC.
 - **Raspberry Pi Pico SDK** — BSD 3-Clause, © Raspberry Pi Ltd. The headers in
   `emu/sdk/include` are an independent host implementation of the Pico SDK's
   C API (function names, types and register-structure layouts) so WiliBSP
