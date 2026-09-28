@@ -12,6 +12,10 @@ change that would break a v1 workflow gets a new major version.
   virtual networks and devices as `wifiscan` / `btscan` events. Scenes come
   from `--radio FILE`, the built-in `--radio @town`, or the script `radio`
   command.
+- Apps written in C++ build and run: the emulator's build enables C++, and
+  an app's `main()` links whichever language it is in. `tests/apps/cpp_check`
+  checks it. (WiliBSP's headers have no `extern "C"` guards, on the board
+  too, so a C++ app wraps its WiliBSP includes in `extern "C" { … }`.)
 
 ## [1.1.0] — 2026-09-27
 

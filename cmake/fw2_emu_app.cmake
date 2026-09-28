@@ -65,6 +65,9 @@ function(fw2_display_app target)
         VERBATIM)
     target_sources(${target} PRIVATE "${_dir}/${target}_uf2_info.c")
     target_compile_definitions(${target} PRIVATE main=fw2_emu_app_main PICO_TARGET_NAME="${target}")
+    # C++ apps: keep the renamed main() unmangled (see app_main_cxx.h).
+    target_compile_options(${target} PRIVATE
+        "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-include ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../emu/include/emu/app_main_cxx.h>")
     set_property(GLOBAL APPEND PROPERTY FW2_EMU_APPS "${target}|${APP_VERSION}|${APP_DESCRIPTION}")
     set_property(TARGET ${target} PROPERTY FW2_EMU_APP TRUE)
 

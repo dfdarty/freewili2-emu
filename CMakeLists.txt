@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.20)
 # the Pico SDK (emu/sdk/include). Hardware is replaced by device models
 # (emu/src/dev_*.c) that speak the same register / wire protocols.
 
-project(freewili2_emu C)
+project(freewili2_emu C CXX)  # CXX: WiliBSP apps may be C++, as in its own build
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_EXTENSIONS ON)

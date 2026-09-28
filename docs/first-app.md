@@ -221,3 +221,20 @@ tools/fw2emu run apps/my_template_app --run-ms 5000
 The target name has to match the folder name everywhere in
 `CMakeLists.txt`, which is what the `sed` line does. Inside a WiliBSP
 checkout, `fw new-app NAME` does the same copy and rename.
+
+## Writing it in C++
+
+Name the files `.cpp` and list them in `add_executable()` as usual; the
+emulator and WiliBSP's board build both compile C++. WiliBSP's headers
+have no `extern "C"` guards, so wrap them, or the linker won't find
+WiliBSP's functions (on the board as well as here):
+
+```cpp
+extern "C" {
+#include "fw2.h"
+#include "platform/diag.h"
+}
+#include <vector>
+```
+
+`tests/apps/cpp_check` is a small working example.
