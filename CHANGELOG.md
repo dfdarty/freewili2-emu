@@ -6,6 +6,8 @@ change that would break a v1 workflow gets a new major version.
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-09-28
+
 ### Added
 - Wi-Fi and Bluetooth scans: `ow_wireless_wifi_on_scan_for_access_points()`
   and `ow_wireless_bluetooth_le_on_scan_bt_devices()` report a scene of
@@ -16,6 +18,14 @@ change that would break a v1 workflow gets a new major version.
   an app's `main()` links whichever language it is in. `tests/apps/cpp_check`
   checks it. (WiliBSP's headers have no `extern "C"` guards, on the board
   too, so a C++ app wraps its WiliBSP includes in `extern "C" { … }`.)
+- `pico/rand.h`: `get_rand_32()`, `get_rand_64()` and `get_rand_128()`, from
+  the PC's random source.
+- Docker: `EXTRA_APPS` repositories are cloned with their submodules.
+
+### Changed
+- `fw2emu hwcheck` no longer warns that malloc may grow into the stack when
+  the app defines its own `_sbrk` (a heap in PSRAM, say); it notes it
+  instead.
 
 ## [1.1.0] — 2026-09-27
 
@@ -76,5 +86,7 @@ The first release.
 - Ctrl+C ends a run cleanly: a recording or `--audio-out` file is still
   written.
 
-[Unreleased]: https://github.com/dfdarty/freewili2-emu/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/dfdarty/freewili2-emu/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/dfdarty/freewili2-emu/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/dfdarty/freewili2-emu/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/dfdarty/freewili2-emu/releases/tag/v1.0.0
