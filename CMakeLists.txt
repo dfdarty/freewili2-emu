@@ -74,6 +74,7 @@ add_library(freewili2_bsp STATIC
     ${_bsp}/agentio/agentio_shadow.c
     ${_bsp}/platform/board.c
     ${_bsp}/platform/ioexp.c
+    ${_bsp}/platform/power.c
     ${_bsp}/platform/psram.c
     ${_bsp}/platform/spi_bus.c
     ${_bsp}/display/st7796.c
@@ -237,17 +238,24 @@ endforeach()
 # WiliBSP's OneWili client (libs/onewili: the MAIN-CPU link used by
 # hello_sdcard, toggleled, hello_vref), built unmodified from its own
 # CMakeLists.txt. emu/src/dev_main.c is the MAIN CPU it talks to.
-if(NOT EXISTS "${WILIBSP_DIR}/libs/onewili/CMakeLists.txt")
+# The submodule ships every OneWili language package; wilibsp/ is the
+# display-CPU C one (WiliBSP's own CMakeLists.txt adds that subdirectory).
+if(NOT EXISTS "${WILIBSP_DIR}/libs/onewili/wilibsp/CMakeLists.txt")
     message(FATAL_ERROR "WiliBSP's nested libs/onewili submodule is missing (the MAIN-CPU link). Run:\n"
                         "  git submodule update --init --recursive")
 endif()
-add_subdirectory("${WILIBSP_DIR}/libs/onewili" "${CMAKE_BINARY_DIR}/wilibsp/onewili")
+add_subdirectory("${WILIBSP_DIR}/libs/onewili/wilibsp" "${CMAKE_BINARY_DIR}/wilibsp/onewili")
+# The transport's UART interrupt handler pops bytes by reading the PL011's
+# DR register in a loop, which host memory can't do; OWFW_NO_IRQ is its
+# documented host mode, draining the same ring with uart_getc() instead.
+target_compile_definitions(onewili_fwgui PRIVATE OWFW_NO_IRQ=1)
 
 # ------------------------------------------------------------------ apps
 # WiliBSP's own apps, built straight from the submodule with their own
 # CMakeLists.txt. Your apps go in apps/ (see apps/README.md).
 set(_fw2_upstream_default template hello_display hello_agentio hello_sensors hello_audio hello_mics
-    hello_keyboard hello_charger hello_psram_exec hello_sdcard toggleled hello_vref retrochat)
+    hello_keyboard hello_charger hello_psram_exec hello_sdcard toggleled hello_vref retrochat
+    canblast dualcpu)
 # Build trees configured before the list grew keep a cached copy of an older
 # default. Every older default is a leading part of this list (it only ever
 # grew at the end), so move exactly those to the new one.

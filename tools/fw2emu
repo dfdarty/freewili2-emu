@@ -223,7 +223,7 @@ def find_sdk(explicit=None, fetch=True):
 
 
 def need_onewili():
-    if not os.path.isfile(os.path.join(WILIBSP, "libs", "onewili", "CMakeLists.txt")):
+    if not os.path.isfile(os.path.join(WILIBSP, "libs", "onewili", "wilibsp", "CMakeLists.txt")):
         die("WiliBSP's libs/onewili submodule is missing (needed for hardware builds). Run:\n"
             "  git -C third_party/wilibsp submodule update --init --depth 1 libs/onewili")
 

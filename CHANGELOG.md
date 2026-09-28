@@ -7,6 +7,12 @@ at 1.2.0.
 
 ## [Unreleased]
 
+### Changed
+- WiliBSP updated to be4bdd6 (OneWili b0eeccd, with peer streams). OneWili's
+  display-CPU package now lives in `libs/onewili/wilibsp/`; the emulator
+  builds it in OneWili's host mode (`OWFW_NO_IRQ`). The new `canblast` and
+  `dualcpu` examples build and start.
+
 ### Added
 - CI builds and smoke-tests the emulator on 64-bit Arm Linux too, and runs
   `hwcheck` there with the aarch64 Arm toolchain: a Raspberry Pi 5 works as

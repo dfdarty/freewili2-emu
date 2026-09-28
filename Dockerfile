@@ -18,7 +18,7 @@ ARG EMSDK_VERSION=4.0.15
 FROM emscripten/emsdk:${EMSDK_VERSION} AS build
 ARG SDL_TAG=release-2.32.8
 ARG WILIBSP_REPO=https://github.com/freewili/wilibsp.git
-ARG WILIBSP_REF=45ad1c219a4e225a51bfb406bbed20460e882f81
+ARG WILIBSP_REF=be4bdd63d31a80f95410e583710cf4e43a7be7fa
 ARG EXTRA_APPS=""
 
 # SDL2 source for Emscripten's SDL2 port (same version the port expects).
@@ -38,7 +38,7 @@ RUN set -eu; \
         git -C third_party/wilibsp fetch --quiet --depth 1 "${WILIBSP_REPO}" "${WILIBSP_REF}"; \
         git -C third_party/wilibsp -c advice.detachedHead=false checkout --quiet FETCH_HEAD; \
     fi; \
-    if [ ! -f third_party/wilibsp/libs/onewili/CMakeLists.txt ]; then \
+    if [ ! -f third_party/wilibsp/libs/onewili/wilibsp/CMakeLists.txt ]; then \
         git init --quiet --bare /tmp/wilibsp.git; \
         git -C /tmp/wilibsp.git fetch --quiet --depth 1 "${WILIBSP_REPO}" "${WILIBSP_REF}"; \
         ONEWILI_REF=$(git -C /tmp/wilibsp.git rev-parse "FETCH_HEAD:libs/onewili"); \

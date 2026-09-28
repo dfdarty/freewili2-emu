@@ -28,7 +28,7 @@ pico_sdk_init()
 add_compile_options(-fcallgraph-info=su -fstack-usage)
 
 add_subdirectory(${WILIBSP_DIR}/bsp wilibsp/bsp)
-add_subdirectory(${WILIBSP_DIR}/libs/onewili wilibsp/onewili)
+add_subdirectory(${WILIBSP_DIR}/libs/onewili/wilibsp wilibsp/onewili)   # the display-CPU OneWili package
 
 foreach(app IN LISTS FW2_HW_APPS)
     get_filename_component(app "${app}" ABSOLUTE)
