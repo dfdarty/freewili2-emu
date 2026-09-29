@@ -229,7 +229,9 @@ ble   7d:4c:21:9e:0a:11  -77
 
 Load one with `--radio scene.txt`, or `--radio @town` for a built-in
 neighbourhood with a few things a surveillance detector would flag. A
-script (or the web page's command line) changes it while the app runs:
+script (or a button in an app's guide on the web page, see
+[`fw2emu-web.json`](cli.md#the-apps-page-fw2emu-webjson)) changes it while
+the app runs:
 `radio ap …`, `radio ble …`, `radio rssi MAC -40` (walk towards it),
 `radio remove MAC`, `radio clear`, `radio load FILE`.
 

@@ -128,7 +128,9 @@ To put your own apps on the page too, list their repositories in
 `EXTRA_APPS`: Git URLs separated by spaces, each optionally ending in
 `#branch` or `#tag`. Each repository needs its app's `CMakeLists.txt` at the
 top, like one made with [`fw2emu new --repo`](first-app.md). Its Git
-submodules come too.
+submodules come too. A [`fw2emu-web.json`](cli.md#the-apps-page-fw2emu-webjson)
+next to it gives the app its start-up options, a guide and a source link on
+the page.
 
 ```sh
 docker build -t freewili2-emu \

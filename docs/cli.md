@@ -112,6 +112,44 @@ tools/fw2emu web [--port 8080] [--no-serve] [--build-dir DIR] APP_DIR [emulator 
 Needs `emcc` (Emscripten 4.0.15) on `PATH`. Serves on `127.0.0.1` only and
 passes the emulator options as `?args=`.
 
+#### The app's page: `fw2emu-web.json`
+
+A `fw2emu-web.json` in the app folder sets up the app's page in the browser
+build (with `fw2emu web`, Docker's `EXTRA_APPS` or `FW2_EMU_EXTRA_APPS`).
+Every member is optional:
+
+```json
+{
+  "args": "--radio @town",
+  "source": "https://github.com/you/your-app",
+  "license": "MIT",
+  "guide": {
+    "what": "What the app is.",
+    "see": "What you see when it starts.",
+    "tryit": [
+      { "label": "A camera appears", "send": ["radio ap b4:1e:52:00:11:22 6 3 -58 FLOCK-CAM-2291"],
+        "text": "- the app raises its alert." },
+      { "label": "Tap twice", "send": ["touch 240 40", "touch 240 40"], "gap_ms": 2500 },
+      { "text": "A line with no button." }
+    ],
+    "check": "What to look for in the log.",
+    "panels": ["log"]
+  }
+}
+```
+
+- `args`: the [options](#the-emulator) the page starts the app with when
+  its URL has no `?args=`.
+- `source`, `license`: a link next to the app's name.
+- `guide`: the **About this app** card. Each `tryit` entry is a line, with
+  a ▶ button when it has `send`: [input-script](scripting.md) commands,
+  sent `gap_ms` apart (default 300). `wait`, `expect` and `quit` aren't
+  accepted from the page. `panels` highlights the panels the app uses:
+  `controls`, `sensors`, `sound`, `header`, `log`. The page shows all of it
+  as plain text.
+
+The build warns about a malformed file and leaves it out.
+
 ### `fw2emu hwcheck` — check the app against the real chip
 
 ```sh
@@ -143,7 +181,7 @@ For building with CMake directly (`cmake -S . -B build -G Ninja -D...`):
 | `FW2_EMU_32BIT` | `OFF` | `-m32` build (native only) |
 | `FW2_EMU_SDL` | `ON` (`OFF` with `FW2_EMU_32BIT`) | window and host audio via SDL2; `OFF` builds a headless-only emulator |
 | `FW2_AGENTIO` | `ON` natively, `OFF` on the web | WiliBSP's agentio harness (needed for `fw.py screenshot`) |
-| `FW2_EMU_WEB_DEMO` | `OFF` | web page: show the note that the hosted demo runs WiliBSP's example apps only (on for the GitHub Pages build) |
+| `FW2_EMU_WEB_DEMO` | `OFF` | web page: show the note that the hosted demo runs WiliBSP's example apps (and SquachWatch) only (on for the GitHub Pages build) |
 | `FW2_EMU_WEB_ENV` | `web` | Emscripten environment; `web,node` runs builds headless under Node, with the host's files visible (`--script`, `--sdcard`, screenshots) |
 
 ## The test runner

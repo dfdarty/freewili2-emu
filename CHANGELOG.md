@@ -7,6 +7,19 @@ at 1.2.0.
 
 ## [Unreleased]
 
+### Added
+- **An app's page in the browser: `fw2emu-web.json`.** In the app folder,
+  it sets the options the page starts the app with, the **About this app**
+  guide (with ▶ buttons that send input-script commands) and a source link.
+  It works with `fw2emu web`, Docker's `EXTRA_APPS` and
+  `FW2_EMU_EXTRA_APPS`. See
+  [the docs](https://dfdarty.github.io/freewili2-emu/cli/#the-apps-page-fw2emu-webjson).
+- The hosted demo includes SquachWatch for the FREE-WILi 2, with its guide.
+
+### Fixed
+- The web page could not send `radio` commands (nor `stream` and `peer`):
+  its command filter didn't list them.
+
 ## [2.1.0] — 2026-09-29
 
 ### Changed

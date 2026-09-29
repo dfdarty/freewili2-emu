@@ -326,6 +326,7 @@ endforeach()
 
 # ------------------------------------------------------------------ web page
 if(EMSCRIPTEN)
+    include(cmake/fw2_emu_web.cmake)
     get_property(_apps GLOBAL PROPERTY FW2_EMU_APPS)
     set(_json "[")
     set(_sep "")
@@ -336,19 +337,21 @@ if(EMSCRIPTEN)
         list(GET _f 2 _desc)
         string(REPLACE "\\" "\\\\" _desc "${_desc}")
         string(REPLACE "\"" "\\\"" _desc "${_desc}")
-        # Options the page starts an app with when the URL gives no ?args=.
-        set(_args "")
-        if(_name STREQUAL "dualcpu")            # its ESP32 half: the emulator's stand-in
-            set(_args "--peer esp32=dualcpu --radio @town")
+        # The app's own fw2emu-web.json: start-up options, guide, source link.
+        get_target_property(_appdir ${_name} FW2_EMU_APP_DIR)
+        fw2_emu_app_web("${_appdir}" "${_name}" _web)
+        set(_webmember "")
+        if(_web)
+            set(_webmember ", \"web\": ${_web}")
         endif()
-        string(APPEND _json "${_sep}\n  {\"name\": \"${_name}\", \"version\": \"${_ver}\", \"description\": \"${_desc}\", \"args\": \"${_args}\"}")
+        string(APPEND _json "${_sep}\n  {\"name\": \"${_name}\", \"version\": \"${_ver}\", \"description\": \"${_desc}\"${_webmember}}")
         set(_sep ",")
     endforeach()
     string(APPEND _json "\n]\n")
     file(WRITE "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/apps.json" "${_json}")
     # The hosted demo (GitHub Pages) shows a note that it only runs the
     # bundled example apps; local and self-hosted builds include your apps.
-    option(FW2_EMU_WEB_DEMO "Web page: show the hosted-demo note (examples only)" OFF)
+    option(FW2_EMU_WEB_DEMO "Web page: show the hosted-demo note (examples and SquachWatch only)" OFF)
     if(FW2_EMU_WEB_DEMO)
         set(FW2_EMU_WEB_DEMO_HIDDEN "")
     else()

@@ -70,6 +70,7 @@ function(fw2_display_app target)
         "$<$<COMPILE_LANGUAGE:CXX>:SHELL:-include ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../emu/include/emu/app_main_cxx.h>")
     set_property(GLOBAL APPEND PROPERTY FW2_EMU_APPS "${target}|${APP_VERSION}|${APP_DESCRIPTION}")
     set_property(TARGET ${target} PROPERTY FW2_EMU_APP TRUE)
+    set_property(TARGET ${target} PROPERTY FW2_EMU_APP_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 
     if(EMSCRIPTEN)
         set_target_properties(${target} PROPERTIES SUFFIX ".js")

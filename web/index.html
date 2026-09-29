@@ -103,7 +103,7 @@
   <a class="docs" href="https://dfdarty.github.io/freewili2-emu/" target="_blank" rel="noopener">Docs</a>
 </header>
 <div id="demo-note" @FW2_EMU_WEB_DEMO_HIDDEN@>
-  <strong>This demo runs WiliBSP's example apps only.</strong>
+  <strong>This demo runs WiliBSP's example apps, and one app built on them: SquachWatch.</strong>
   To run and test <em>your own</em> app, build it with the emulator — in GitHub Codespaces, WSL2 or Linux —
   using <code>tools/fw2emu run</code> or <code>tools/fw2emu web</code>.
   <a href="https://dfdarty.github.io/freewili2-emu/first-app/">How to test your own app →</a>
@@ -203,6 +203,12 @@
   const current = apps.find(a => a.name === want) || apps[0];
   if (!current) { statusEl.textContent = 'no apps built'; return; }
   desc.textContent = `v${current.version} — ${current.description}`;
+  const web = (current.web && typeof current.web === 'object') ? current.web : {};
+  if (typeof web.source === 'string' && /^https:\/\//.test(web.source)) {
+    const a = Object.assign(document.createElement('a'), { href: web.source, target: '_blank', rel: 'noopener',
+      textContent: typeof web.license === 'string' && web.license ? `source (${web.license})` : 'source' });
+    desc.append(' · ', a);
+  }
   document.title = `${current.name} — FREE-WILi 2 Emulator`;
 
   // Switching apps starts the new one with default options: ?args= belongs to the app it was given for.
@@ -228,7 +234,7 @@
   window.Module = {
     canvas,
     pageTitle: document.title,
-    arguments: (params.has('args') ? params.get('args') : (current.args || '')).split(' ').filter(Boolean),
+    arguments: (params.has('args') ? params.get('args') : (typeof web.args === 'string' ? web.args : '')).split(' ').filter(Boolean),
     print: t => log(t),
     printErr: t => log(t, t.startsWith('[emu]') ? 'emu' : 'err'),
     onRuntimeInitialized: () => { statusEl.textContent = ''; canvas.focus(); },
@@ -568,10 +574,25 @@
     check: 'Automate these checks with an input script and <code>expect</code> (docs: “Input scripts”).',
     panels: ['log'],
   };
-  const g = GUIDES[current.name] || GENERIC;
-  document.getElementById('g-what').innerHTML = g.what;
-  document.getElementById('g-see').innerHTML = g.see;
-  document.getElementById('g-check').innerHTML = g.check || '';
+  // An app's own guide (its fw2emu-web.json) is shown as plain text, and its
+  // buttons send input-script commands.
+  const str = v => (typeof v === 'string' ? v : '');
+  const fromApp = w => {
+    if (!w || typeof w !== 'object') return null;
+    const tryit = (Array.isArray(w.tryit) ? w.tryit : []).filter(t => t && typeof t === 'object').map(t => {
+      const cmds = (Array.isArray(t.send) ? t.send : []).filter(c => typeof c === 'string');
+      const gap = Number.isFinite(t.gap_ms) ? Math.max(0, t.gap_ms) : 300;
+      return { label: cmds.length ? str(t.label) || 'Go' : '', plain: true, text: str(t.text),
+               run: async () => { for (const [i, c] of cmds.entries()) { if (i) await sleep(gap); send(c); } } };
+    });
+    return { what: str(w.what), see: str(w.see), check: str(w.check), plain: true, tryit: tryit.length ? tryit : [EXIT],
+             panels: (Array.isArray(w.panels) ? w.panels : ['log']).filter(p => typeof p === 'string') };
+  };
+  const g = GUIDES[current.name] || fromApp(web.guide) || GENERIC;
+  const put = (el, v) => { if (g.plain) el.textContent = v; else el.innerHTML = v; };
+  put(document.getElementById('g-what'), g.what);
+  put(document.getElementById('g-see'), g.see);
+  put(document.getElementById('g-check'), g.check || '');
   const ul = document.getElementById('g-try');
   for (const t of g.tryit) {
     const li = document.createElement('li');
@@ -580,7 +601,8 @@
       b.addEventListener('click', async () => { b.disabled = true; try { await t.run(); } finally { b.disabled = false; } canvas.focus(); });
       li.append(b);
     }
-    li.insertAdjacentHTML('beforeend', t.text || '');
+    if (t.plain) li.append(t.text ? ` ${t.text}` : '');
+    else li.insertAdjacentHTML('beforeend', t.text || '');
     ul.append(li);
   }
   // Panels this app uses: highlight them and put them first in the panel grid

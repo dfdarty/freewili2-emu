@@ -339,7 +339,8 @@ bool emu_script_exec_line(const char *line) {
         else emu_rec_start(arg);
         return true;
     }
-    static const char *const ok[] = { "press", "hold", "release", "touch", "drag", "set", "log", "screenshot", "header", "play" };
+    static const char *const ok[] = { "press", "hold", "release", "touch", "drag", "set", "log", "screenshot", "header", "play",
+                                      "radio", "stream", "peer" };
     bool known = false;
     for (size_t i = 0; i < sizeof ok / sizeof ok[0]; i++)
         if (!strncmp(p, ok[i], strlen(ok[i]))) known = true;
