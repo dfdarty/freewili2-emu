@@ -7,6 +7,8 @@ at 1.2.0.
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-09-29
+
 ### Changed
 - WiliBSP updated to be4bdd6 (OneWili b0eeccd, with peer streams). OneWili's
   display-CPU package now lives in `libs/onewili/wilibsp/`. The emulator
@@ -155,7 +157,8 @@ The first release.
 - Ctrl+C ends a run cleanly: a recording or `--audio-out` file is still
   written.
 
-[Unreleased]: https://github.com/dfdarty/freewili2-emu/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/dfdarty/freewili2-emu/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/dfdarty/freewili2-emu/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/dfdarty/freewili2-emu/compare/v1.2.0...v2.0.0
 [1.2.0]: https://github.com/dfdarty/freewili2-emu/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/dfdarty/freewili2-emu/compare/v1.0.0...v1.1.0
