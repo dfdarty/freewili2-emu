@@ -928,6 +928,17 @@ def cmd_hwcheck(a):
         for c in elf_compilers(elf):
             if c not in compilers:
                 compilers.append(c)
+    # The installable app file WiliBSP's build makes next to the ELF. Only an
+    # image that passed (ok / warn) is copied out with --uf2-dir: an error, or
+    # a known upstream failure, means it may not run.
+    for r in results:
+        uf2 = os.path.join(build, "apps", os.path.basename(r["dir"]), r["app"] + ".uf2")
+        if os.path.exists(uf2):
+            r["uf2"] = uf2
+            if a.uf2_dir and r["status"] in ("ok", "warn"):
+                os.makedirs(a.uf2_dir, exist_ok=True)
+                shutil.copy2(uf2, os.path.join(a.uf2_dir, r["app"] + ".uf2"))
+                r["uf2_copy"] = os.path.join(a.uf2_dir, r["app"] + ".uf2")
     # The version comes from what was actually linked, not from the tool we meant to use.
     linked = ", ".join(sorted({v for v, _ in compilers})) or gv
     if compilers and gv not in {v for v, _ in compilers}:
@@ -1101,6 +1112,10 @@ def print_table(meta, results, verbose):
         for c in s["core1"]:
             print(f"  core 1: {c['bytes']} B  {stackcheck.format_path(c['path'], 8)}")
         _print_messages(r)
+        if r.get("uf2_copy"):
+            print(f"  UF2: {r['uf2_copy']}")
+        elif r.get("uf2") and r["status"] in ("ok", "warn"):
+            print(f"  UF2: {r['uf2']}")
         print()
 
 
@@ -1219,6 +1234,9 @@ def main():
                    help="known upstream failures of WiliBSP's example apps also count (exit 1)")
     h.add_argument("--exclude", action="append", metavar="APP", default=[],
                    help="skip an app (folder or target name); repeatable")
+    h.add_argument("--uf2-dir", metavar="DIR",
+                   help="copy each app's UF2 (the file you install on the board) into DIR, "
+                        "if its check passed")
     h.add_argument("--json", action="store_true", help="print JSON instead of the table")
     h.add_argument("-o", "--output", metavar="FILE", help="also write the JSON report to FILE")
     h.add_argument("-v", "--verbose", action="store_true", help="list IRQ handlers and every unknown")

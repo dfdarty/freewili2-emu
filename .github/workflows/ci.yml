@@ -181,11 +181,19 @@ jobs:
           artifact-name: action-selftest
       - name: Check its output
         run: test "${{ steps.selftest.outputs.result }}" = pass
-      - name: Run the action on the starter template (examples/app-template)
+      - name: Run the action on the starter template (examples/app-template), with hwcheck
+        id: template
         uses: ./
         with:
           app: examples/app-template
           artifact-name: action-template
+          hwcheck: true
+      - name: It hands back the template's UF2
+        env:
+          UF2: ${{ steps.template.outputs.uf2 }}
+        run: |
+          test -n "$UF2" && test -s "$UF2"
+          python3 third_party/wilibsp/tools/check_app_uf2.py "$UF2"
       - name: fw2emu new makes an app whose test passes
         run: |
           tools/fw2emu new --repo "$RUNNER_TEMP/new_app"

@@ -19,7 +19,7 @@ inputs:
     description: Build with AddressSanitizer and UBSan, to catch memory bugs.
     default: "false"
   hwcheck:
-    description: Also build for the real chip with the Pico SDK and Arm GCC and check image size, RAM, PSRAM and stack (adds a few minutes the first time; cached after).
+    description: Also build for the real chip with the Pico SDK and Arm GCC and check image size, RAM, PSRAM and stack (adds a few minutes the first time; cached after). If the check passes, the app's UF2 (the file you install on the board) goes in the out folder too.
     default: "false"
   out:
     description: Folder, relative to the repository, for the log, the recorded audio and the SD card the app used. Screenshots go wherever the script says (usually out/).
@@ -35,6 +35,9 @@ outputs:
   result:
     description: pass or fail
     value: ${{ steps.test.outputs.result }}
+  uf2:
+    description: With hwcheck, the path of the app's UF2 in the out folder, if the check passed (empty otherwise). Attach it to a release, as WiliBSP asks of published apps.
+    value: ${{ steps.hw.outputs.uf2 }}
 
 runs:
   using: composite
@@ -91,15 +94,20 @@ runs:
         fi
 
     - name: Check it fits the real chip
+      id: hw
       if: inputs.hwcheck == 'true' && (success() || failure())
       shell: bash
       env:
         EMU: ${{ steps.emu.outputs.root }}
         APP: ${{ inputs.app }}
+        OUT: ${{ inputs.out }}
       run: |
-        python3 "$EMU/tools/fw2emu" hwcheck --fetch-toolchain --build-dir "$RUNNER_TEMP/fw2emu-hw" "$APP" \
-          | tee "$RUNNER_TEMP/hwcheck.txt"
+        mkdir -p "$OUT"
+        python3 "$EMU/tools/fw2emu" hwcheck --fetch-toolchain --build-dir "$RUNNER_TEMP/fw2emu-hw" \
+          --uf2-dir "$OUT" "$APP" | tee "$RUNNER_TEMP/hwcheck.txt"
         rc=${PIPESTATUS[0]}
+        uf2=$(ls "$OUT"/*.uf2 2>/dev/null | head -n 1 || true)
+        echo "uf2=$uf2" >> "$GITHUB_OUTPUT"
         { echo '### FREE-WILi 2 hardware check'; echo; echo '```'; sed -n '/^FREE-WILi 2 hardware check/,$p' "$RUNNER_TEMP/hwcheck.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
         exit $rc
 

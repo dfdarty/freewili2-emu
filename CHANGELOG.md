@@ -29,6 +29,11 @@ at 1.2.0.
 - CI builds and smoke-tests the emulator on 64-bit Arm Linux too, and runs
   `hwcheck` there with the aarch64 Arm toolchain: a Raspberry Pi 5 works as
   the development machine.
+- **The UF2 you install on the board, from hwcheck and the Action.**
+  `fw2emu hwcheck` shows each passing app's UF2 and `--uf2-dir DIR` copies
+  them out; with `hwcheck: true` the Action puts it in the `out` artifact
+  and gives its path as the `uf2` output, for attaching to a release
+  ([example](https://dfdarty.github.io/freewili2-emu/ci/#examples)).
 
 ## [2.0.0] — 2026-09-28
 

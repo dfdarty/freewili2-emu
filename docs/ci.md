@@ -50,12 +50,13 @@ SDK and Arm GCC the first time; later runs take it from the cache.
 | `script` | `APP/test.txt` | the test script; `SCRIPT.expect` next to it is checked too |
 | `args` | | extra [emulator flags](cli.md), e.g. `--sensor-csv logs/flight.csv` |
 | `sanitize` | `false` | build with AddressSanitizer and UBSan: memory bugs fail the run |
-| `hwcheck` | `false` | also build for the real chip and check image size, RAM, PSRAM and stack ([details](debugging.md#real-hardware-check-toolsfw2emu-hwcheck)); the SDK and toolchain are cached after the first run |
+| `hwcheck` | `false` | also build for the real chip and check image size, RAM, PSRAM and stack ([details](debugging.md#real-hardware-check-toolsfw2emu-hwcheck)); the SDK and toolchain are cached after the first run. If the check passes, the app's UF2 goes in `out` too |
 | `out` | `out` | where the log, audio and SD card go (point screenshots there too: `screenshot out/…`) |
 | `artifact-name` | `fw2emu-APPNAME` | name of the uploaded artifact |
 | `upload` | `true` | upload `out` as an artifact, pass or fail |
 
-The step's output `result` is `pass` or `fail`.
+The step's outputs: `result` is `pass` or `fail`, and with `hwcheck`, `uf2` is
+the path of the app's UF2 in `out` (empty if the check failed).
 
 App code runs at the RP2350's estimated speed, measured against the runner
 at the start of each run, so a slow or busy runner doesn't make the app look
@@ -102,6 +103,32 @@ expect "launch detected" 5000
 expect "apogee at" 15000
 screenshot out/after_flight.png
 quit
+```
+
+Publishing a release with its UF2 attached, as WiliBSP asks of published
+apps: push a tag such as `v1.0.0`, and this workflow tests the app, checks
+it against the chip and attaches the UF2 to a GitHub release:
+
+```yaml
+name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - id: fw2
+        uses: dfdarty/freewili2-emu@v2
+        with:
+          app: .
+          hwcheck: true
+      - run: gh release create "$GITHUB_REF_NAME" "${{ steps.fw2.outputs.uf2 }}" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
 ```
 
 ## Run the same test on your PC

@@ -117,13 +117,16 @@ passes the emulator options as `?args=`.
 ```sh
 tools/fw2emu hwcheck [APP_DIR ...] [-v] [--json] [-o FILE] [--exclude APP] [--strict]
                      [--build-dir DIR] [--sdk PATH] [--toolchain DIR] [--fetch-toolchain]
+                     [--uf2-dir DIR]
 ```
 
 Builds with the Pico SDK and Arm GCC and reports SRAM image, RAM, PSRAM and
 worst-case stack; exits 1 on an overflow or a failed build. With no folders,
 it checks every app the emulator builds. Known upstream failures of
 WiliBSP's own example apps show as `KNOWN (upstream)` and don't change the
-exit status; `--strict` makes them count. Full description:
+exit status; `--strict` makes them count. Each app that passes shows its
+UF2, the file you install on the board; `--uf2-dir DIR` also copies them
+into DIR. Full description:
 [Debugging and hardware checks](debugging.md#real-hardware-check-toolsfw2emu-hwcheck).
 
 ## CMake options
