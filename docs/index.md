@@ -14,7 +14,7 @@ package, compile **unmodified** against it and run:
 [Try it in your browser](https://dfdarty.github.io/freewili2-emu/emulator/){ .md-button .md-button--primary }
 [Install it](getting-started.md){ .md-button }
 
-The browser demo runs WiliBSP's example apps, and SquachWatch. To run and test **your own**
+The browser demo runs WiliBSP's example apps, SquachWatch and Orca-9. To run and test **your own**
 app, build it with the emulator — see [Your first app](first-app.md).
 
 ![hello_display running in the emulator](hello_display.png)

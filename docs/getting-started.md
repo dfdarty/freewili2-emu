@@ -8,7 +8,7 @@ Open the [hosted emulator](https://dfdarty.github.io/freewili2-emu/emulator/)
 and pick an app, with sliders for the sensors and the sound in the room.
 
 !!! warning "Example apps only"
-    The hosted page runs WiliBSP's example apps, and SquachWatch. It can't load your own
+    The hosted page runs WiliBSP's example apps, SquachWatch and Orca-9. It can't load your own
     code: apps are compiled from source into the emulator, so yours has to
     be built first. Use option 2 or 3, then `fw2emu run` for a window or
     `fw2emu web` for the same browser page with your app in it.

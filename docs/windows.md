@@ -10,7 +10,7 @@ ones.
     machine, please [open an issue](https://github.com/dfdarty/freewili2-emu/issues)
     so this page can say so. With no setup at all, the
     [browser version](https://dfdarty.github.io/freewili2-emu/emulator/)
-    runs WiliBSP's example apps and SquachWatch, and a [Codespace](getting-started.md#2-github-codespaces-a-full-dev-environment-in-a-browser-tab)
+    runs WiliBSP's example apps, SquachWatch and Orca-9, and a [Codespace](getting-started.md#2-github-codespaces-a-full-dev-environment-in-a-browser-tab)
     gives you the full tool in a browser tab.
 
 ## 1. Install WSL2 and Ubuntu (once)
