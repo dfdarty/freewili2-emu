@@ -7,6 +7,8 @@ at 1.2.0.
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-09-30
+
 ### Added
 - **An app's page in the browser: `fw2emu-web.json`.** In the app folder,
   it sets the options the page starts the app with, the **About this app**
@@ -170,7 +172,8 @@ The first release.
 - Ctrl+C ends a run cleanly: a recording or `--audio-out` file is still
   written.
 
-[Unreleased]: https://github.com/dfdarty/freewili2-emu/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/dfdarty/freewili2-emu/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/dfdarty/freewili2-emu/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/dfdarty/freewili2-emu/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/dfdarty/freewili2-emu/compare/v1.2.0...v2.0.0
 [1.2.0]: https://github.com/dfdarty/freewili2-emu/compare/v1.1.0...v1.2.0
