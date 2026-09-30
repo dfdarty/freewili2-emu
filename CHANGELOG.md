@@ -7,6 +7,10 @@ at 1.2.0.
 
 ## [Unreleased]
 
+### Fixed
+- The web page's guides for `dualcpu` and `canblast`: they showed the generic
+  text for your own apps.
+
 ## [2.2.0] — 2026-09-30
 
 ### Added

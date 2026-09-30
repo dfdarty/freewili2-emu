@@ -552,6 +552,29 @@
       check: 'The log says “link up, toggling main-CPU GPIO 25”; a toggle the MAIN processor refused would log a failure.',
       panels: ['header', 'log'],
     },
+    dualcpu: {
+      what: 'The display half of a combined app: the display CPU and the ESP32-C5 exchange messages over OneWili peer streams, which the MAIN processor routes. Here the ESP32 half is the emulator’s stand-in.',
+      see: 'Left, the ESP32’s telemetry: uptime, temperature, free memory, its LED, and the strongest networks from its Wi-Fi scan. Right, the link: “esp32 LIVE”, the ping round trip, and the stream counters.',
+      tryit: [
+        { label: 'LED green', run: () => press('GREEN'), text: '— the display asks the ESP32 to light its LED; the “led” line and the square on the screen follow, and the log says “esp32: LED solid”.' },
+        { label: 'Rainbow', run: () => press('YELLOW'), text: '— the same, in the ESP32’s rainbow mode.' },
+        { label: 'Scan now', run: () => send('touch 440 14'), text: '— SCAN asks the ESP32 for a fresh Wi-Fi scan; the list updates with its next telemetry.' },
+        { text: 'On a board the round trip is about 6 ms. Here it also includes the app’s own screen updates at the chip’s estimated speed, so it reads higher.' },
+        EXIT,
+      ],
+      check: 'The log shows “dualcpu: esp32 link live”, then a stats line every 2 s with pong= and rtt_last_us=.',
+      panels: ['log'],
+    },
+    canblast: {
+      what: 'A CAN FD test app: it drives the MAIN processor’s CAN FD controller over OneWili as fast as the link allows, and counts what comes back.',
+      see: 'The app starts, but the emulator doesn’t model the CAN FD controller yet: its CAN commands fail, and the counters stay at zero.',
+      tryit: [
+        { text: 'The log names each CAN command the emulator doesn’t model yet.' },
+        EXIT,
+      ],
+      check: 'The log shows “main: OneWili command … is not modelled by the emulator” for the CAN commands.',
+      panels: ['log'],
+    },
     hello_vref: {
       what: 'Tests the header’s voltage reference (VIO): sweeps the VREF options and measures VIO and Vout with the display CPU’s ADC, then toggles GPIO 25.',
       see: '“SWEEPING VREF OPTIONS…”, then “VIO = 3.3V” and pin 25 toggling on the strip under the device.',
