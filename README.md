@@ -54,11 +54,13 @@ display (SSH, a container)? The emulator notices and runs headless.
 - The browser build needs Emscripten 4.0.15 (emsdk), or use the Dockerfile:
   `docker build -t freewili2-emu .`
 
-It can't run `.uf2` files (apps are rebuilt from source). The radios are
-stand-ins (the stock Wi-Fi and Bluetooth scans over a scene of virtual
-networks, and a stand-in ESP32 for combined apps), the CPU's speed is an
-estimate, and USB host and DVI output aren't modelled — check those on the
-board. On Windows it runs in WSL2 ([steps](https://dfdarty.github.io/freewili2-emu/windows/));
+It can't run `.uf2` files (apps are rebuilt from source), and the CPU's
+speed is an estimate. Of the radios, only the ESP32-C5 has stand-ins: the
+stock Wi-Fi and Bluetooth scans over a scene of virtual networks, and a
+stand-in ESP32 for combined apps. Infrared, the CC1101, LoRa and NFC aren't
+modelled, nor are USB host, DVI output, or most of the MAIN processor beyond
+the SD card, header GPIO and Vout (CAN, analog inputs, the bus bridges) —
+check those on the board. On Windows it runs in WSL2 ([steps](https://dfdarty.github.io/freewili2-emu/windows/));
 or open the repository in **GitHub Codespaces** for a ready-made
 environment. VS Code tasks and a debug setup come with it. See [Install and run](https://dfdarty.github.io/freewili2-emu/getting-started/).
 

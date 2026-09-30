@@ -77,11 +77,15 @@ attaches a model to each bus, register block or wire protocol:
 
 ## Not modelled yet
 
-- Most of what the MAIN processor does beyond the SD card, header GPIO and
-  Vout: CAN, analog inputs, the UART/I2C/SPI bridges, the FPGA and logic
-  analyzer. Those OneWili commands return a failure instead of hanging.
-- The radios: the CC1101 sub-GHz radio, LoRa, Wi-Fi/Bluetooth, NFC/RFID and
-  infrared.
+- Most of what the MAIN processor does beyond the SD card, header GPIO,
+  Vout, the board clock and peer streams: CAN, analog inputs, the
+  UART/I2C/SPI bridges, the FPGA and logic analyzer. Those OneWili commands
+  return a failure instead of hanging.
+- The radios, except stand-ins for the ESP32-C5: its stock Wi-Fi and
+  Bluetooth scans report a [scene of virtual networks](main-link.md#wi-fi-and-bluetooth-scans),
+  and a [stand-in ESP32](main-link.md#peer-streams-esp32-cm0-pc) answers
+  combined apps. The CC1101 sub-GHz radio, LoRa, NFC/RFID and infrared
+  aren't modelled.
 - USB host and DVI output (stubbed).
 
 ## The second core
