@@ -17,7 +17,7 @@ attaches a model to each bus, register block or wire protocol:
 | FT6336U touch on I2C1 | `dev_touch.c` | register file, point latches, chip-to-screen orientation; taps are held until the app has read them |
 | WS2812 × 16 on pio1 | `dev_leds.c` | GRB words from the PIO state machine, latch timing; RGB_LEDS power zone |
 | PCAL6524 IO expander | `dev_ioexp.c` | output ports and pin directions: VREF select, antenna switch, mic/IR/USB power |
-| MAIN CPU on UART0 (FwGUI link) | `dev_main.c` | the 8 Mbaud link byte for byte: OneWili console commands and replies, the SDFS SD-card protocol over a host folder, header GPIO, programmable Vout, the board clock, `EPOWERZONE` ([details](main-link.md)) |
+| MAIN CPU on UART0 (FwGUI link) | `dev_main.c`, `dev_radio.c`, `dev_stream.c` | the 8 Mbaud link byte for byte: OneWili console commands and replies, the SDFS SD-card protocol over a host folder, header GPIO, programmable Vout, the board clock, the ESP32-C5's Wi-Fi and Bluetooth scans over a scene of virtual networks, peer streams to stand-in ESP32/CM0/PC clients, `EPOWERZONE` ([details](main-link.md)) |
 | Display ADC (VIO / Vout monitors) | `sdk_periph.c`, `dev_main.c` | 12-bit conversions of the header rails through the 2:1 dividers, at levels measured on hardware |
 | Board-manager PIC on UART1 | `dev_pic.c` | the 62 500-baud link byte for byte: 23-byte status frames (14 buttons, charger, rails); break → `0xC9` → 11-byte power command; ~1 s rail walk |
 | SHT40, OPT4001, BMI323, BMM350 on I2C1 | `dev_sensors.c` | each part's command/register protocol, CRCs, ranges and encodings; SENSORS power zone |

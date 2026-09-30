@@ -8,7 +8,7 @@ Open the [hosted emulator](https://dfdarty.github.io/freewili2-emu/emulator/)
 and pick an app, with sliders for the sensors and the sound in the room.
 
 !!! warning "Example apps only"
-    The hosted page runs WiliBSP's example apps. It can't load your own
+    The hosted page runs WiliBSP's example apps, and SquachWatch. It can't load your own
     code: apps are compiled from source into the emulator, so yours has to
     be built first. Use option 2 or 3, then `fw2emu run` for a window or
     `fw2emu web` for the same browser page with your app in it.
@@ -37,13 +37,13 @@ Code with the Dev Containers extension.
 ## 3. Native on Linux
 
 ```sh
-sudo apt install git cmake ninja-build libsdl2-dev zlib1g-dev python3
+sudo apt install build-essential git cmake ninja-build libsdl2-dev zlib1g-dev python3
 git clone --recurse-submodules https://github.com/dfdarty/freewili2-emu
 cd freewili2-emu
 cmake -S . -B build -G Ninja
 cmake --build build
 build/bin/hello_display          # opens a window
-tests/smoke.sh                   # runs every app headless; screenshots and logs in out/
+tests/smoke.sh                   # runs every app that has a test script, headless; screenshots and logs in out/
 ```
 
 Every app in the build ends up in `build/bin/`. Run one with `--help` to see

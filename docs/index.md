@@ -14,7 +14,7 @@ package, compile **unmodified** against it and run:
 [Try it in your browser](https://dfdarty.github.io/freewili2-emu/emulator/){ .md-button .md-button--primary }
 [Install it](getting-started.md){ .md-button }
 
-The browser demo runs WiliBSP's example apps. To run and test **your own**
+The browser demo runs WiliBSP's example apps, and SquachWatch. To run and test **your own**
 app, build it with the emulator — see [Your first app](first-app.md).
 
 ![hello_display running in the emulator](hello_display.png)
@@ -51,10 +51,11 @@ The display, touch screen, all 14 buttons, the 16 RGB LEDs, the four
 on-board sensors (temperature/humidity, light, IMU, magnetometer), the audio
 codec with speaker and headphone jack, the four PDM microphones, the power
 zones and charger status from the board-manager chip, 8 MB of PSRAM, and
-the link to the MAIN processor with its SD card, header GPIO and Vout. The
-radios are stand-ins: the stock Wi-Fi and Bluetooth scans report a scene of
-virtual networks, and [peer streams](main-link.md#peer-streams-esp32-cm0-pc)
-reach a stand-in ESP32, CM0 or PC. See [App compatibility](compatibility.md)
+the link to the MAIN processor with its SD card, header GPIO and Vout. Of
+the radios, only the ESP32-C5 has stand-ins: the stock Wi-Fi and Bluetooth
+scans report a scene of virtual networks, and
+[peer streams](main-link.md#peer-streams-esp32-cm0-pc) reach a stand-in
+ESP32, CM0 or PC. Infrared, the CC1101, LoRa and NFC aren't modelled. See [App compatibility](compatibility.md)
 for exactly which WiliBSP apps run, and [Accuracy](accuracy.md) for how closely each part follows the real
 hardware.
 

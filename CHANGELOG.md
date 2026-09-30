@@ -12,8 +12,16 @@ at 1.2.0.
   on WiliBSP, with its guide.
 
 ### Fixed
+- **A failing script step is reported at its line in the file.** Blank lines
+  and comments weren't counted, so `FAIL script line N`, `fw2emu test`'s
+  `file:line: error` and the GitHub annotations pointed at the wrong line in
+  any script with comments. CI now checks this.
+- `-v` logs every dropped peer-stream datagram with its reason, as the docs
+  said; before, only drops for an absent peer were logged.
 - The web page's guides for `dualcpu` and `canblast`: they showed the generic
   text for your own apps.
+- Docs: corrected throughout after a line-by-line review against the code
+  (what isn't modelled, the build packages, option lists, task names, links).
 
 ## [2.2.0] — 2026-09-30
 

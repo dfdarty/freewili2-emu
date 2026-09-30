@@ -163,7 +163,7 @@ browser) is a 50-second model-rocket flight with the device's z axis along
 the rocket: 1 g on the pad for 2 s, a 1.4 s boost of up to 7.8 g (clipped at
 4 g), drag deceleration while coasting, an ejection kick and a tumble at
 apogee (12 s, with the light flickering), swinging under the parachute,
-landing at 40 s, then lying on its side (x axis down). Use it to exercise
+landing at 40 s, then lying on its side (x axis pointing up). Use it to exercise
 launch, apogee and landing detection.
 
 ## Example: a flight profile from a script

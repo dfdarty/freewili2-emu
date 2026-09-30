@@ -24,7 +24,7 @@ run unmodified.
 | Wi-Fi and Bluetooth scans | the stock ESP32-C5 firmware's scans, over a scene of virtual networks and devices ([below](#wi-fi-and-bluetooth-scans)) | `ow_wireless_wifi_on_scan_for_access_points`, `ow_wireless_bluetooth_le_on_scan_bt_devices` (wifiscan / btscan text events) |
 | Peer streams | MAIN's router between the display app and other OneWili clients: a stand-in ESP32, CM0 or PC ([below](#peer-streams-esp32-cm0-pc)) | `ow_stream_write`, `ow_stream_poll`, `ow_stream_drops`, `ow_wireless_e_sp32_mode` (`w\e`), `ow_hardware_system_stream_status` (`h\a\c`) |
 | Power-zone refusals | `EPOWERZONE` for GPIO/analog commands, once the app has reported its zones | `ow_fwgui_send_power_zones` |
-| Anything else | a well-formed failure reply: the call returns `OW_ERR_FAILED` at once instead of timing out after 5 s | the other ~480 generated commands |
+| Anything else | a well-formed failure reply: the call returns `OW_ERR_FAILED` at once instead of timing out after 5 s | the other ~610 generated commands |
 
 The front panel shows the header: one square per pin (green = driven high,
 outlined = driven low, blue = driven from outside, purple = PWM), the VIO
@@ -328,7 +328,8 @@ Modelled from OneWili's stream client and `ow_stream_wire.h`, and
 - `fw2emu hwcheck` builds the app for the board. Note that every OneWili
   text command (`ow_io_gpio_*`, `ow_io_analog_*`, …) keeps about 10 KB of
   buffers on the stack. That is more than both 4 KB scratch banks, so
-  `hwcheck` reports `toggleled` and `hello_vref` as overflowing, as a
+  `hwcheck` reports `toggleled`, `hello_vref`, `canblast` and `dualcpu`
+  (through `ow_stream_drops`' `h\a\c` fallback) as overflowing, as a
   [known upstream issue](compatibility.md#known-upstream-issues). The SD
   calls don't have this problem. This comes from the generated client, not
   from the emulator; your own app that sends text commands gets the same

@@ -51,7 +51,7 @@ body:
     id: version
     attributes:
       label: Emulator version
-      description: A release (v1.0.0), or the commit (`git rev-parse --short HEAD`).
+      description: A release (v2.2.0), or the commit (`git rev-parse --short HEAD`).
   - type: dropdown
     id: hardware
     attributes:

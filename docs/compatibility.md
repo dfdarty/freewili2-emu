@@ -5,7 +5,7 @@ board the emulator covers: each one below either runs unmodified, or is
 blocked by a part that isn't modelled yet.
 
 **14 of 19 run.** On every push, CI runs each of them headless with its
-script in `tests/scripts/` (natively, with sanitizers and as a 32-bit build),
+script in `tests/scripts/` (natively on x86-64 and ARM64, with sanitizers and as a 32-bit build),
 and builds all of them for the board with
 [`fw2emu hwcheck`](debugging.md#real-hardware-check-toolsfw2emu-hwcheck)
 using the Arm GNU Toolchain 14.2.Rel1. hwcheck fails CI on any error except
@@ -54,12 +54,15 @@ them stops happening, hwcheck warns so the list can be updated.
 
 ## Planned order
 
-1. **The radios** — infrared (`hello_ir`), then the CC1101 (`hello_cc1101`).
-   This is next.
+Since 1.0.0 the work has gone mostly to the MAIN link (the board clock, the
+Wi-Fi and Bluetooth stand-ins, peer streams) and to the CPU's speed. Still
+to come:
+
+1. **The radios** — infrared (`hello_ir`) and the CC1101 (`hello_cc1101`).
 2. **USB host** and **DVI**.
-3. **More of the MAIN CPU** over OneWili (CAN, analog inputs, the bus
-   bridges): the link is in place, and each one is a new set of commands in
-   `emu/src/dev_main.c`.
+3. **More of the MAIN CPU** over OneWili (CAN for `canblast`, analog inputs,
+   the bus bridges): the link is in place, and each one is a new set of
+   commands in `emu/src/dev_main.c`.
 
 ## Your own apps
 

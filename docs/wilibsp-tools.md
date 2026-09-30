@@ -3,7 +3,7 @@
 WiliBSP ships a command-line tool, `tools/fw.py`, and an in-app harness
 called **agentio** that let a person or an AI agent drive a real board over
 the debug probe: press buttons, touch the screen, type, and take screenshots.
-Its [`AGENTS.md`](https://github.com/freewili/wilibsp/blob/main/AGENTS.md)
+Its [`AGENTS.md`](https://github.com/freewili/wilibsp/blob/master/AGENTS.md)
 workflow and Claude Code skills are built on them.
 
 The emulator serves the same RTT channels on the same TCP ports that WiliBSP

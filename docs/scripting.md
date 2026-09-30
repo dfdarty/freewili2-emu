@@ -18,7 +18,7 @@ word where a number should be, too many arguments — stops the run with
 | `set NAME V [V V V]` | change a sensor or the room sound (table below) |
 | `play FILE [loop] [step]` / `play stop` | play a time-stamped sensor log (CSV, or `@launch`) from now; see [Playing a sensor log](sensors-and-sound.md#playing-a-sensor-log) |
 | `radio LINE` / `radio load FILE` | change the Wi-Fi networks and Bluetooth devices in range, or load a scene (`@town` is built in); see [Wi-Fi and Bluetooth scans](main-link.md#wi-fi-and-bluetooth-scans) |
-| `stream PEER BYTES` | send a OneWili [peer-stream](main-link.md#peer-streams-esp32-cm0-pc) datagram to the app from `esp32`, `cm0` or `host`: hex bytes (`01 ff 3c`) or `"text"`; the peer must be in the run (`--peer NAME=script`) |
+| `stream PEER BYTES` | send a OneWili [peer-stream](main-link.md#peer-streams-esp32-cm0-pc) datagram to the app from `esp32`, `cm0` or `host`: hex bytes (`01 ff 3c`) or `"text"`; the peer must be in the run (`--peer NAME=script` or `peer NAME script`), and the ESP32 also needs its power zone on and ESP32 Mode set to OneWili API |
 | `peer NAME MODE` | add or remove a peer while the app runs: `esp32 off\|script\|dualcpu`, `cm0 off\|script`, `host off\|script` |
 | `screenshot FILE [lcd\|device]` | PNG of the 480x320 LCD, or the whole front panel |
 | `log TEXT` | print a marker |

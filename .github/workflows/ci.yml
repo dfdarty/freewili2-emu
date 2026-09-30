@@ -109,7 +109,7 @@ jobs:
           restore-keys: fw2emu-arm-14.2.rel1-pico-sdk-2.3.0-${{ runner.os }}-${{ runner.arch }}-
       - name: Build every app for the RP2350 and check memory and stack
         # Known upstream failures of WiliBSP's own examples (hello_psram_exec's
-        # layout check, the OneWili stack use of toggleled / hello_vref) are
+        # layout check, the OneWili stack use of toggleled / hello_vref / canblast / dualcpu) are
         # listed in tools/fw2emu (KNOWN_UPSTREAM) and reported as
         # "KNOWN (upstream)" without failing the run; any other error fails
         # it. If a listed issue stops occurring, hwcheck emits a warning
@@ -198,6 +198,15 @@ jobs:
         run: |
           tools/fw2emu new --repo "$RUNNER_TEMP/new_app"
           tools/fw2emu test --out "$RUNNER_TEMP/new-out" "$RUNNER_TEMP/new_app"
+      - name: A failing step is reported at its line in the script (comments and blank lines count)
+        run: |
+          printf '# comments\n\n# and blank lines\nwait 500\n\n# line 7:\nexpect "never happens" 300\nquit\n' > "$RUNNER_TEMP/new_app/fail.txt"
+          if env -u GITHUB_ACTIONS -u GITHUB_STEP_SUMMARY tools/fw2emu test --script "$RUNNER_TEMP/new_app/fail.txt" \
+               --out "$RUNNER_TEMP/fail-out" "$RUNNER_TEMP/new_app" 2> "$RUNNER_TEMP/fail.err"; then
+            echo "the test should have failed"; exit 1
+          fi
+          cat "$RUNNER_TEMP/fail.err"
+          grep -E 'fail\.txt:7: error: expect' "$RUNNER_TEMP/fail.err"
       # What `uses: dfdarty/freewili2-emu@REF` does in someone else's repo:
       # GitHub hands over the action without submodules, so it fetches them.
       - name: Fetch the emulator the way a remote use does

@@ -49,7 +49,7 @@ SDK and Arm GCC the first time; later runs take it from the cache.
 | `app` | `.` | the app folder, relative to your repository |
 | `script` | `APP/test.txt` | the test script; `SCRIPT.expect` next to it is checked too |
 | `args` | | extra [emulator flags](cli.md), e.g. `--sensor-csv logs/flight.csv` |
-| `sanitize` | `false` | build with AddressSanitizer and UBSan: memory bugs fail the run |
+| `sanitize` | `false` | build with AddressSanitizer and UBSan: memory bugs fail the run. App code then runs at the runner's full speed (the checks would skew the chip-speed estimate); add `args: --cpu chip` to slow it anyway |
 | `hwcheck` | `false` | also build for the real chip and check image size, RAM, PSRAM and stack ([details](debugging.md#real-hardware-check-toolsfw2emu-hwcheck)); the SDK and toolchain are cached after the first run. If the check passes, the app's UF2 goes in `out` too |
 | `out` | `out` | where the log, audio and SD card go (point screenshots there too: `screenshot out/…`) |
 | `artifact-name` | `fw2emu-APPNAME` | name of the uploaded artifact |
@@ -59,8 +59,9 @@ The step's outputs: `result` is `pass` or `fail`, and with `hwcheck`, `uf2` is
 the path of the app's UF2 in `out` (empty if the check failed).
 
 App code runs at the RP2350's estimated speed, measured against the runner
-at the start of each run, so a slow or busy runner doesn't make the app look
-slower than it is ([CPU speed](debugging.md#is-it-fast-enough-cpu-speed)).
+at the start of each run, so a slower runner doesn't make the app look
+slower than it is; load that changes during the run still can
+([CPU speed](debugging.md#is-it-fast-enough-cpu-speed)).
 The log ends with each core's load. `args: --cpu host` runs app code at the
 runner's full speed instead.
 

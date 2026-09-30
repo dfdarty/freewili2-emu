@@ -99,10 +99,20 @@ static double link_us(unsigned id) {
     return TEXT_LINK_US;
 }
 
+/* -v: every dropped datagram, with the reason. */
+static void log_drop(unsigned src, unsigned dst, const char *why) {
+    if (!emu_verbose) return;
+    char d[16];
+    if (peer_ok(dst)) snprintf(d, sizeof d, "%s", PEER_NAME[dst]);
+    else snprintf(d, sizeof d, "id %u", dst);
+    emu_log("stream: %s -> %s dropped (%s)", peer_ok(src) ? PEER_NAME[src] : "?", d, why);
+}
+
 static void enqueue(double due, unsigned dst, unsigned src, const uint8_t *d, size_t n) {
     if (S.nq == MAX_INFLIGHT) {                                /* MAIN's queues are small too */
         if (dst == OW_STREAM_PEER_DISPLAY) S.dropped_to++;
         if (peer_ok(src)) S.peer_drops[src]++;
+        log_drop(src, dst, "MAIN's queue is full");
         return;
     }
     dgram_t *g = &S.q[S.nq++];
@@ -139,7 +149,11 @@ static void log_datagram(unsigned src, unsigned dst, const uint8_t *d, size_t n)
  * only other client the emulator runs) after the sender's link latency. */
 static void peer_send(unsigned src, unsigned dst, const uint8_t *d, size_t n, double now) {
     if (!peer_present(src)) return;
-    if (dst != OW_STREAM_PEER_DISPLAY) { S.peer_drops[src]++; return; }
+    if (dst != OW_STREAM_PEER_DISPLAY) {                        /* the display is the only other client here */
+        S.peer_drops[src]++;
+        log_drop(src, dst, "the emulator runs no client there");
+        return;
+    }
     if (emu_verbose && S.mode[src] == PEER_SCRIPT) log_datagram(src, dst, d, n);
     enqueue(now + link_us(src), dst, src, d, n);
 }
@@ -262,14 +276,18 @@ void emu_stream_from_display(const uint8_t *p, size_t n) {
     unsigned dst = p[0];
     if (data == 0 || data > OW_STREAM_MTU || !peer_ok(dst) || dst == OW_STREAM_PEER_MAIN) {
         S.dropped_from++;
+        log_drop(OW_STREAM_PEER_DISPLAY, dst, data == 0 ? "empty datagram"
+                                            : data > OW_STREAM_MTU ? "longer than 128 bytes"
+                                            : !peer_ok(dst) ? "no such peer"
+                                            : "addressed to MAIN, which has no consumer");
     } else if (dst == OW_STREAM_PEER_DISPLAY) {        /* loopback */
         enqueue(now + LOOPBACK_US, dst, OW_STREAM_PEER_DISPLAY, p + OW_STREAM_HDR, data);
     } else if (!peer_present(dst)) {
         S.dropped_from++;
-        if (emu_verbose) emu_log("stream: display -> %s dropped (%s)", PEER_NAME[dst],
-                                 dst == OW_STREAM_PEER_ESP32 && S.mode[dst] != PEER_OFF
-                                     ? (S.esp32_mode != 1 ? "ESP32 Mode is not OneWili API" : "the ESP32 is off")
-                                     : "no such client in this run (--peer)");
+        log_drop(OW_STREAM_PEER_DISPLAY, dst,
+                 dst == OW_STREAM_PEER_ESP32 && S.mode[dst] != PEER_OFF
+                     ? (S.esp32_mode != 1 ? "ESP32 Mode is not OneWili API" : "the ESP32 is off")
+                     : "no such client in this run; see --peer");
     } else {
         enqueue(now + link_us(dst), dst, OW_STREAM_PEER_DISPLAY, p + OW_STREAM_HDR, data);
     }
@@ -291,6 +309,7 @@ void emu_stream_task(double now) {
             if (!S.open) {                             /* the display isn't using streams */
                 S.dropped_to++;
                 if (peer_ok(d.src) && d.src != OW_STREAM_PEER_DISPLAY) S.peer_drops[d.src]++;
+                log_drop(d.src, d.dst, "the display's link is closed");
                 continue;
             }
             uint8_t p[OW_STREAM_HDR + OW_STREAM_MTU] = { OW_STREAM_PEER_DISPLAY, d.src };
@@ -298,6 +317,7 @@ void emu_stream_task(double now) {
             emu_main_stream_send(p, OW_STREAM_HDR + d.len);
         } else if (!peer_present(d.dst)) {
             S.peer_drops[d.dst]++;
+            log_drop(d.src, d.dst, "the peer went away before it arrived");
         } else if (S.mode[d.dst] == PEER_DUALCPU) {
             esp_receive(&d, now);
         } else {

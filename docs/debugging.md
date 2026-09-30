@@ -218,8 +218,9 @@ tools/fw2emu hwcheck --fetch-toolchain     # use (and if needed download) Arm GN
 ```
 
 Options: `--build-dir DIR` (default `build-hw/`), `--sdk PATH`,
-`--toolchain DIR`, `--fetch-toolchain`, `--exclude APP` (repeatable) and
-`--strict` (see [known upstream issues](#known-upstream-issues)).
+`--toolchain DIR`, `--fetch-toolchain`, `--exclude APP` (repeatable),
+`--uf2-dir DIR` (copy each passing app's UF2 there) and `--strict` (see
+[known upstream issues](#known-upstream-issues)).
 
 **Requirements:**
 

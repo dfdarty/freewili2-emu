@@ -13,7 +13,7 @@ browser.
 > not with FREE-WILi.
 
 **[Documentation](https://dfdarty.github.io/freewili2-emu/)** ·
-**[Try it in your browser](https://dfdarty.github.io/freewili2-emu/emulator/)** (WiliBSP example apps; build the emulator to test your own) ·
+**[Try it in your browser](https://dfdarty.github.io/freewili2-emu/emulator/)** (WiliBSP's example apps and SquachWatch; build the emulator to test your own) ·
 [App compatibility](https://dfdarty.github.io/freewili2-emu/compatibility/)
 
 ![hello_display running in the emulator](docs/hello_display.png)
@@ -21,7 +21,7 @@ browser.
 ## Quick start
 
 ```sh
-sudo apt install git cmake ninja-build libsdl2-dev zlib1g-dev python3
+sudo apt install build-essential git cmake ninja-build libsdl2-dev zlib1g-dev python3
 git clone --recurse-submodules https://github.com/dfdarty/freewili2-emu
 cd freewili2-emu
 cmake -S . -B build -G Ninja && cmake --build build

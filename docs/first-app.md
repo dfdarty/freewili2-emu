@@ -8,7 +8,8 @@ WiliBSP's own toolchain, into a UF2 for the board.
     `tools/fw2emu new apps/my_app` creates this whole app, test included, in
     one step. For an app in its own GitHub repository, start from
     `tools/fw2emu new --repo ~/my_app`, which also sets up the
-    [GitHub Action](ci.md). The steps below show what's in it.
+    [GitHub Action](ci.md). The steps below build much the same app by
+    hand, one piece at a time.
 
 ## 1. Make the folder
 

@@ -10,7 +10,7 @@ ones.
     machine, please [open an issue](https://github.com/dfdarty/freewili2-emu/issues)
     so this page can say so. With no setup at all, the
     [browser version](https://dfdarty.github.io/freewili2-emu/emulator/)
-    runs WiliBSP's example apps, and a [Codespace](getting-started.md#2-github-codespaces-a-full-dev-environment-in-a-browser-tab)
+    runs WiliBSP's example apps and SquachWatch, and a [Codespace](getting-started.md#2-github-codespaces-a-full-dev-environment-in-a-browser-tab)
     gives you the full tool in a browser tab.
 
 ## 1. Install WSL2 and Ubuntu (once)
@@ -76,14 +76,14 @@ VS Code opens the folder through WSL and offers the recommended extensions
     |---|---|
     | FW2: run this app | build it and open the emulator window |
     | FW2: test this app (test.txt) | run its test; a failing `expect` shows in *Problems* at its line in `test.txt` |
-    | FW2: record a test | open the window and record what you do into `recorded.txt` next to the app ([details](scripting.md#recording-a-script)) |
-    | FW2: check it fits the real chip | [`fw2emu hwcheck`](debugging.md#real-hardware-check-toolsfw2emu-hwcheck) |
+    | FW2: record a test (writes recorded.txt) | open the window and record what you do into `recorded.txt` next to the app ([details](scripting.md#recording-a-script)) |
+    | FW2: check it fits the real chip (hwcheck) | [`fw2emu hwcheck`](debugging.md#real-hardware-check-toolsfw2emu-hwcheck) |
     | FW2: new app in apps/ | `fw2emu new`, asks for the name |
 
 - **Debugging** (*Run and Debug*): **FW2: debug this app** builds the open
   app as a Debug build and starts it under gdb with the window open, so
   breakpoints in your code and in WiliBSP work. **FW2: debug this app's
-  test** runs its `test.txt` headless under the debugger.
+  test (headless)** runs its `test.txt` headless under the debugger.
 - **IntelliSense** from the build of the app you last ran (it reads
   `build-run/compile_commands.json`), so WiliBSP's functions complete and
   jump to their definitions.

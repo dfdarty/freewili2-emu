@@ -32,7 +32,7 @@
     main > aside > #guide { position: absolute; top: calc(18 / 520 * 100%); bottom: calc(18 / 520 * 100%);
                             left: 0; right: 0; overflow-y: auto; }
   }
-  /* the controls sit under the device: 1-4 columns depending on width */
+  /* the controls sit under the device: 1-5 columns depending on width */
   #panels { display: grid; gap: 12px; padding: 16px 20px 24px; max-width: 1880px; margin: 0 auto;
             grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));   /* 5 across on a wide screen */
             grid-auto-rows: 1fr; align-items: stretch; }   /* every panel the same height */
@@ -173,7 +173,7 @@
 <footer>
   WiliBSP apps compiled unmodified against an emulated FREE-WILi 2 display CPU.
   Bus timing is modelled; the CPU runs at the RP2350's estimated speed (<code>?args=--cpu host</code>
-  for your PC's); Wi-Fi and Bluetooth are simulated scenes, and analog behaviour is simplified —
+  for your PC's; <code>?args=</code> replaces an app's own start options); Wi-Fi and Bluetooth are simulated scenes, and analog behaviour is simplified —
   verify on hardware.
   <br>Unofficial project, not affiliated with FREE-WILi LLC. Found something the emulator
   gets wrong? <a href="https://github.com/dfdarty/freewili2-emu/issues">Report it here</a>,
@@ -535,7 +535,7 @@
     },
     hello_sdcard: {
       what: 'Reads and writes the SD card, which belongs to the MAIN processor, over the OneWili link.',
-      see: 'The app creates /owlog, appends lines to run.txt, reads the file back and lists the folder, which takes about 20 s. The SD light on the header strip under the device flickers while it works.',
+      see: 'The app creates /owlog, appends lines to run.txt, reads the file back and lists the folder, which takes about 12 s. The SD light on the header strip under the device flickers while it works.',
       tryit: [
         { label: 'Run it again', run: () => location.reload(), text: '— in the browser the card lives in memory and starts empty on every load; in a native build it is a real folder (./sdcard) that keeps its files.' },
       ],

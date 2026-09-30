@@ -59,7 +59,7 @@ app folder; everything after the folder is passed to the emulator.
 ### `fw2emu run` — build one app and run it
 
 ```sh
-tools/fw2emu run [--sanitize] [--m32] [--debug] [--gdb] [--build-dir DIR] APP_DIR [emulator options]
+tools/fw2emu run [--sanitize] [--m32] [--debug] [--gdb] [--build-only] [--build-dir DIR] APP_DIR [emulator options]
 ```
 
 `APP_DIR` is any folder with a `fw2_display_app()` `CMakeLists.txt`, inside
@@ -72,11 +72,13 @@ the repository or not. Only that app is configured, in its own build folder
 | `--m32` | 32-bit build, headless ([details](debugging.md#32-bit-build-fw2_emu_32bit)) |
 | `--debug` | `CMAKE_BUILD_TYPE=Debug` |
 | `--gdb` | Debug build, started under gdb with a breakpoint in the app's `main` |
+| `--build-only` | build, print the program's path and stop (`bin/current-app` also points at it) |
+| `--build-dir DIR` | default `build-run/`; `-asan`, `-m32` and `-debug` are added to the name with the options above |
 
 ### `fw2emu test` — build one app, run its test and check it
 
 ```sh
-tools/fw2emu test [--script FILE] [--out DIR] [--timeout S] [--sanitize] [--m32] APP_DIR [emulator options]
+tools/fw2emu test [--script FILE] [--out DIR] [--timeout S] [--build-dir DIR] [--sanitize] [--m32] APP_DIR [emulator options]
 ```
 
 Builds the app headless (no SDL needed, in `build-test/`), runs it with its
@@ -115,7 +117,8 @@ passes the emulator options as `?args=`.
 #### The app's page: `fw2emu-web.json`
 
 A `fw2emu-web.json` in the app folder sets up the app's page in the browser
-build (with `fw2emu web`, Docker's `EXTRA_APPS` or `FW2_EMU_EXTRA_APPS`).
+build: your apps in `apps/`, and those built with `fw2emu web`, Docker's
+`EXTRA_APPS` or `FW2_EMU_EXTRA_APPS`.
 Every member is optional:
 
 ```json
@@ -140,7 +143,7 @@ Every member is optional:
 
 - `args`: the [options](#the-emulator) the page starts the app with when
   its URL has no `?args=`.
-- `source`, `license`: a link next to the app's name.
+- `source`, `license`: a link next to the app's name (an `https://` address).
 - `guide`: the **About this app** card. Each `tryit` entry is a line, with
   a ▶ button when it has `send`: [input-script](scripting.md) commands,
   sent `gap_ms` apart (default 300). `wait`, `expect` and `quit` aren't
@@ -173,7 +176,8 @@ For building with CMake directly (`cmake -S . -B build -G Ninja -D...`):
 
 | Option | Default | Effect |
 |---|---|---|
-| `FW2_EMU_UPSTREAM_APPS` | the WiliBSP apps that run | which WiliBSP example apps to build |
+| `FW2_EMU_UPSTREAM_APPS` | the 14 WiliBSP apps that run, plus `canblast` (it builds; CAN isn't modelled) | which WiliBSP example apps to build |
+| `WILIBSP_DIR` | `third_party/wilibsp` | the WiliBSP checkout to build against |
 | `FW2_EMU_LOCAL_APPS` | `ON` | build every folder in `apps/` |
 | `FW2_EMU_TEST_APPS` | `ON` natively, `OFF` on the web | build the self-test apps in `tests/apps/` |
 | `FW2_EMU_EXTRA_APPS` | empty | extra app folders, absolute paths, `;`-separated |
@@ -198,4 +202,5 @@ card folder (`out/sdcard-<app>`). Screenshots, logs and audio land in
 if its log doesn't meet `tests/scripts/<app>.expect` (or
 `apps/<app>/test.expect`): each line there is a regular expression the log
 must match; a line starting with `!` must not match, and `@sd PATH REGEX`
-checks a file the app left on its SD card.
+checks a file the app left on its SD card. Extra emulator options for one
+app go in `tests/scripts/<app>.args` (or `apps/<app>/test.args`).

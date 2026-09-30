@@ -47,7 +47,8 @@ docs/               this site
 - **Note it in the changelog.** Add a line under *Unreleased* in
   `CHANGELOG.md` for anything a user would notice.
 - **Keep the tests green.** `tests/smoke.sh` must pass natively; CI also
-  runs the sanitizer, 32-bit, hwcheck and web builds.
+  runs the sanitizer, 32-bit, ARM64, hwcheck and web builds, and the
+  GitHub Action's self-test.
 
 ## Keeping up with WiliBSP
 
@@ -76,7 +77,8 @@ permissions → Allow GitHub Actions to create and approve pull requests**.
    initialise the model in `emu/src/core.c`.
 4. If people need to control it, add `set` names (see `emu_sensor_set()`),
    and a panel on `web/index.html` if it helps.
-5. Add the WiliBSP example app that uses the part to `FW2_EMU_UPSTREAM_APPS`,
+5. Add the WiliBSP example app that uses the part to `_fw2_upstream_default`
+   in `CMakeLists.txt` (the default of `FW2_EMU_UPSTREAM_APPS`),
    with `tests/scripts/<app>.txt` and a `.expect` file that checks something
    meaningful in its log.
 6. Update [App compatibility](compatibility.md) and [Accuracy](accuracy.md).

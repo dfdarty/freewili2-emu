@@ -32,7 +32,7 @@ it, so it is never lost between two polls.
 
 ## Browser page
 
-The browser version adds a guide beside the device and a row of panels under it (one to four columns, depending on the window width):
+The browser version adds a guide beside the device and a row of panels under it (one to five columns, depending on the window width):
 
 - **App picker** and **Restart** at the top. `?app=NAME` in the URL picks an
   app; `?args=...` passes [command-line flags](cli.md), for example
@@ -45,8 +45,9 @@ The browser version adds a guide beside the device and a row of panels under it 
   play a tone into one microphone, type with the chord keyboard, …) by moving
   the same sliders and pressing the same keys you would. It also says which
   log line confirms the result. Panels the app uses are outlined, tagged
-  "used by this app" and listed first in the panels under the device. Your own apps get a
-  short general guide.
+  "used by this app" and listed first in the panels under the device. Your own apps show the guide
+  from their [`fw2emu-web.json`](cli.md#the-apps-page-fw2emu-webjson), or a
+  short general guide without one.
 - **Sensors:** temperature, humidity, light, pitch, roll and compass heading,
   plus sensor noise. **Rocket launch** plays the built-in flight, and **Play a
   CSV…** plays your own [sensor log](sensors-and-sound.md#playing-a-sensor-log).

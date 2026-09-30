@@ -33,6 +33,7 @@ bool emu_touch_get(int *x, int *y);
 
 #define MAX_LINES 1024
 static char   *s_lines[MAX_LINES];
+static int     s_lineno[MAX_LINES];      /* each command's line in the file, from 0: errors name it */
 static int     s_nlines, s_pc;
 static bool    s_active;
 static uint64_t s_resume_us;
@@ -80,11 +81,13 @@ void emu_script_load(const char *path) {
     FILE *f = fopen(path, "r");
     if (!f) emu_fatal("cannot open script %s", path);
     char buf[512];
-    while (fgets(buf, sizeof buf, f) && s_nlines < MAX_LINES) {
+    int fileline = 0;
+    for (; fgets(buf, sizeof buf, f) && s_nlines < MAX_LINES; fileline++) {
         char *p = buf;
         while (isspace((unsigned char)*p)) p++;
         strip_comment(p);
-        if (!*p) continue;
+        if (!*p) continue;                         /* blank or comment: still counts as a line */
+        s_lineno[s_nlines] = fileline;
         s_lines[s_nlines++] = strdup(p);
     }
     fclose(f);
@@ -173,7 +176,9 @@ static bool s_from_web;              /* a command from the page: errors are logg
 static void exec(char *line, uint64_t now) {
     char raw[512];
     snprintf(raw, sizeof raw, "%s", line);
-    int ln = s_pc - 1;
+    /* The command's line in the script file (0-based); a command from the web
+     * page has none, and its errors are logged rather than fatal. */
+    int ln = !s_from_web && s_pc > 0 ? s_lineno[s_pc - 1] : 0;
     if (!strncmp(line, "expect", 6) && (line[6] == ' ' || line[6] == '\t' || !line[6])) {
         exec_expect(line + 6, now, ln);
         return;
