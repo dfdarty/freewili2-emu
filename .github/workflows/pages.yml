@@ -36,16 +36,17 @@ jobs:
         with:
           version: 4.0.15
           actions-cache-folder: emsdk-cache-pages
-      # Besides WiliBSP's examples, the demo shows one app built on them:
-      # SquachWatch (GPL-3.0; its page links to the source).
-      - name: Get SquachWatch for the FREE-WILi 2
+      # Besides WiliBSP's examples, the demo shows two apps built on them:
+      # SquachWatch (GPL-3.0) and Orca-9 (MIT); their pages link to the source.
+      - name: Get SquachWatch and Orca-9 for the FREE-WILi 2
         run: |
           git clone --depth 1 --recurse-submodules --shallow-submodules \
             https://github.com/dfdarty/squachwatch-fw2 "$RUNNER_TEMP/squachwatch-fw2"
+          git clone --depth 1 https://github.com/dfdarty/orca9 "$RUNNER_TEMP/orca9"
       - name: Build the emulator for the browser
         run: |
           emcmake cmake -S . -B build-web -G Ninja -DCMAKE_BUILD_TYPE=Release -DFW2_EMU_WEB_DEMO=ON \
-            -DFW2_EMU_EXTRA_APPS="$RUNNER_TEMP/squachwatch-fw2"
+            -DFW2_EMU_EXTRA_APPS="$RUNNER_TEMP/squachwatch-fw2;$RUNNER_TEMP/orca9"
           cmake --build build-web
       - uses: actions/setup-python@v7
         with:

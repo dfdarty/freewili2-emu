@@ -7,6 +7,10 @@ at 1.2.0.
 
 ## [Unreleased]
 
+### Added
+- The hosted demo includes Orca-9: Pod Commander, a 3D space shooter built
+  on WiliBSP, with its guide.
+
 ### Fixed
 - The web page's guides for `dualcpu` and `canblast`: they showed the generic
   text for your own apps.
