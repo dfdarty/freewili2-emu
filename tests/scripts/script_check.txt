@@ -20,5 +20,11 @@ log "keep # this"         # a '#' inside double quotes stays
 expect "^script: \"keep # this\"$"
 header                    # the MAIN-CPU header probe
 expect "^script: header VIO"
+press GREEN               # slow mode: the app polls touch every 400 ms
+expect "check: slow polling on"
+touch 240 160 20          # a quick tap: seen in one poll, not two
+expect "check: slow tap seen in 1 polls" 2000
+press GREEN
+expect "check: slow polling off" 1500
 screenshot out/script_check.png device   # the file name ends before the comment
 quit                      # done

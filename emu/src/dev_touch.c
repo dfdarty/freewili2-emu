@@ -17,8 +17,12 @@
  * SEEN_READS reads and a finger-like minimum time) before the next one is
  * applied. Real touches can't be shorter than the controller's report
  * period, and this keeps quick clicks — and quick double-taps — intact when
- * the host stalls the emulator (e.g. a busy browser tab). */
-#define SEEN_READS   2u
+ * the host stalls the emulator (e.g. a busy browser tab).
+ * One read, not two: WiliBSP's ft6336_poll() reads the chip once, and an app
+ * that polls once a frame and acts on every frame the screen is pressed (as
+ * SquachWatch's menu button does) took a quick click held over two slow
+ * frames for two taps. tests/apps/script_check checks it ("slow tap"). */
+#define SEEN_READS   1u
 #define MIN_DOWN_US  60000u
 #define MIN_UP_US    20000u
 #define STAGE_CAP_US 1000000u

@@ -12,6 +12,12 @@ at 1.2.0.
   on WiliBSP, with its guide.
 
 ### Fixed
+- **A quick tap reached a slow app as two.** The touch model held a quick
+  tap until the app had read the chip twice. An app polling once a frame at
+  2-3 frames a second (as in the browser) saw it in two frames, and one that
+  acts on every frame the screen is pressed took it for two taps:
+  SquachWatch's menu opened and closed again. A tap is now held for one read.
+  `script_check` checks it.
 - **A failing script step is reported at its line in the file.** Blank lines
   and comments weren't counted, so `FAIL script line N`, `fw2emu test`'s
   `file:line: error` and the GitHub annotations pointed at the wrong line in
