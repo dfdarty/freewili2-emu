@@ -7,6 +7,8 @@ at 1.2.0.
 
 ## [Unreleased]
 
+## [2.2.1] — 2026-10-01
+
 ### Added
 - The hosted demo includes Orca-9: Pod Commander, a 3D space shooter built
   on WiliBSP, with its guide.
@@ -194,7 +196,8 @@ The first release.
 - Ctrl+C ends a run cleanly: a recording or `--audio-out` file is still
   written.
 
-[Unreleased]: https://github.com/dfdarty/freewili2-emu/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/dfdarty/freewili2-emu/compare/v2.2.1...HEAD
+[2.2.1]: https://github.com/dfdarty/freewili2-emu/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/dfdarty/freewili2-emu/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/dfdarty/freewili2-emu/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/dfdarty/freewili2-emu/compare/v1.2.0...v2.0.0
