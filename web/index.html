@@ -172,8 +172,8 @@
 </section>
 <footer>
   WiliBSP apps compiled unmodified against an emulated FREE-WILi 2 display CPU.
-  Bus timing is modelled; the CPU runs at the RP2350's estimated speed (<code>?args=--cpu host</code>
-  for your PC's; <code>?args=</code> replaces an app's own start options); Wi-Fi and Bluetooth are simulated scenes, and analog behaviour is simplified —
+  Bus timing is modelled; app code runs at your PC's speed here (<code>?args=--cpu chip</code>
+  estimates the RP2350's, as native builds and tests do; <code>?args=</code> replaces an app's own start options); Wi-Fi and Bluetooth are simulated scenes, and analog behaviour is simplified —
   verify on hardware.
   <br>Unofficial project, not affiliated with FREE-WILi LLC. Found something the emulator
   gets wrong? <a href="https://github.com/dfdarty/freewili2-emu/issues">Report it here</a>,
@@ -559,7 +559,7 @@
         { label: 'LED green', run: () => press('GREEN'), text: '— the display asks the ESP32 to light its LED; the “led” line and the square on the screen follow, and the log says “esp32: LED solid”.' },
         { label: 'Rainbow', run: () => press('YELLOW'), text: '— the same, in the ESP32’s rainbow mode.' },
         { label: 'Scan now', run: () => send('touch 440 14'), text: '— SCAN asks the ESP32 for a fresh Wi-Fi scan; the list updates with its next telemetry.' },
-        { text: 'On a board the round trip is about 6 ms. Here it also includes the app’s own screen updates at the chip’s estimated speed, so it reads higher.' },
+        { text: 'On a board the round trip is about 6 ms. Here the app runs at your PC’s speed, so it reads close to the link’s own 5.5 ms.' },
         EXIT,
       ],
       check: 'The log shows “dualcpu: esp32 link live”, then a stats line every 2 s with pong= and rtt_last_us=.',

@@ -54,6 +54,18 @@
 #ifndef CPU_SANITIZED
 #define CPU_SANITIZED 0
 #endif
+/* The browser build runs app code at full speed too, unless --cpu chip asks.
+ * WebAssembly runs drawing-heavy code 2-3x slower relative to CoreMark than
+ * native code does (SquachWatch's loop(): ~150 ms a pass estimated in the
+ * browser, ~65 ms natively), so the estimate there is that much too
+ * pessimistic; and the page is for trying apps, while tests and CI, which
+ * run natively, keep the chip's speed. */
+#if defined(__EMSCRIPTEN__)
+#define CPU_WEB 1
+#else
+#define CPU_WEB 0
+#endif
+#define CPU_FULL_BY_DEFAULT (CPU_SANITIZED || CPU_WEB)
 
 #define NOINSTR __attribute__((no_instrument_function, no_sanitize("address", "undefined")))
 
@@ -89,7 +101,7 @@ static cpu_core_t s_cpu[2];
 static unsigned   s_core;                  /* which core the host thread is running */
 static __thread int t_main;                /* the emulator's thread (not SDL's audio thread) */
 static bool       s_on;                    /* hooks live */
-static bool       s_throttle = !CPU_SANITIZED;   /* --cpu chip */
+static bool       s_throttle = !CPU_FULL_BY_DEFAULT;   /* --cpu chip */
 static bool       s_mode_given;            /* --cpu on the command line */
 static double     s_fixed_k;               /* --cpu-factor */
 static double     s_host_cm;               /* CoreMark iterations/s of this build on this PC */
@@ -213,6 +225,9 @@ static void announce(void) {
     } else if (CPU_SANITIZED && !s_mode_given) {
         emu_log("cpu: sanitizer build: app code runs at this PC's full speed, as the sanitizers' checks "
                 "would skew the chip-speed estimate (--cpu chip slows it anyway)");
+    } else if (CPU_WEB && !s_mode_given) {
+        emu_log("cpu: browser build: app code runs at this PC's full speed, %.0fx the RP2350's at %u MHz; "
+                "?args=--cpu chip estimates the chip's (pessimistically here: see the docs)", s_k, mhz);
     } else {
         emu_log("cpu: app code runs at this PC's full speed, %.0fx the RP2350's at %u MHz (--cpu host)",
                 s_k, mhz);

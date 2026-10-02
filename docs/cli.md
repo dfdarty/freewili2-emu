@@ -24,7 +24,7 @@ same options:
 | `--peer NAME=MODE` | another OneWili client for [peer streams](main-link.md#peer-streams-esp32-cm0-pc) (repeatable): `esp32=dualcpu` runs a stand-in for the ESP32 half of WiliBSP's `dualcpu`; `esp32=script`, `cm0=script` and `host=script` are driven from an [input script](scripting.md) |
 | `--rtc WHEN` | the board clock at start-up, e.g. `"2027-05-16 09:30:00"`; it then runs with emulator time. Without it the clock starts at the PC's local time. Apps read and set it with `ow_hardware_get_time()` / `ow_hardware_set_time()` ([MAIN link](main-link.md#the-board-clock)) |
 | `--perf` | log CPU and bus load and LCD throughput once a second (`perf: CPU0 45%  SPI1 62.5 MHz 41%  I2C1 400 kHz 2%  LCD 10.4 screens/s`); the same line is always on the device's bottom edge — see [bus timing](debugging.md#is-it-fast-enough-bus-timing) |
-| `--cpu chip\|host` | `chip` (the default): app code runs at the RP2350's speed; `host`: at your PC's full speed — see [CPU speed](debugging.md#is-it-fast-enough-cpu-speed) |
+| `--cpu chip\|host` | `chip` (the default natively): app code runs at the RP2350's speed; `host` (the default in the browser and in sanitizer builds): at your PC's full speed — see [CPU speed](debugging.md#is-it-fast-enough-cpu-speed) |
 | `--cpu-factor F` | your PC runs app code F times as fast as the chip; the default is measured at start-up |
 | `--instant-bus` | SPI and I2C transfers take no time, as before bus timing existed; for comparing, not for testing |
 | `--sdcard DIR` | folder that stands in for the SD card in the MAIN CPU's slot (default `./sdcard`, created with sample files on first use; `none` = no card) — see [The MAIN processor link](main-link.md) |

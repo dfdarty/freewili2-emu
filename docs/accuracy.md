@@ -62,7 +62,9 @@ attaches a model to each bus, register block or wire protocol:
   ([details](debugging.md#is-it-fast-enough-cpu-speed)). It is an estimate,
   good to within about a factor of two: PSRAM cache misses and
   double-precision maths aren't counted, so heavy code of either kind is
-  slower on the board.
+  slower on the board. The browser page runs app code at full speed
+  instead, as its estimate is too pessimistic; native builds, tests and CI
+  use the estimate.
 - **Acoustics.** All microphones hear the same sound with no delay between
   capsules; per-mic gains are the only spatial effect.
 - **Sensors** return what you set or [play from a log](sensors-and-sound.md#playing-a-sensor-log),

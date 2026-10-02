@@ -7,6 +7,14 @@ at 1.2.0.
 
 ## [Unreleased]
 
+### Changed
+- **The browser page runs app code at full speed.** Its chip-speed estimate
+  runs 2-3x pessimistic for drawing-heavy code (WebAssembly's speeds differ
+  from native code's relative to CoreMark): SquachWatch drew 2-3 frames a
+  second there against an estimated 8-10 on the board. `?args=--cpu chip`
+  still gives the estimate. Native builds, `fw2emu test` and the GitHub
+  Action keep the chip's speed.
+
 ## [2.2.1] — 2026-10-01
 
 ### Added

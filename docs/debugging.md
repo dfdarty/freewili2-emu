@@ -110,6 +110,11 @@ calibration, so the estimate would come out pessimistic (retrochat's
 decoder, about 30% of core 1 natively, shows 55–80% under ASan).
 `--cpu chip` slows it anyway.
 
+The browser build runs app code at full speed too, for the reason above:
+its estimate runs 2–3× pessimistic for drawing-heavy code, and the page is
+for trying apps. `?args=--cpu chip` gives the estimate there. Native builds,
+`fw2emu test` and the GitHub Action keep the chip's speed.
+
 Scripts see the slowed app too: a test whose `wait`s were tuned at PC speed
 may need longer ones, which is the point. `--cpu host` gives the old
 behaviour where a test needs it.
