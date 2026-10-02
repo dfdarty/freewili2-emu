@@ -7,6 +7,8 @@ at 1.2.0.
 
 ## [Unreleased]
 
+## [2.3.0] — 2026-10-02
+
 ### Changed
 - **The browser page runs app code at full speed.** Its chip-speed estimate
   runs 2-3x pessimistic for drawing-heavy code (WebAssembly's speeds differ
@@ -204,7 +206,8 @@ The first release.
 - Ctrl+C ends a run cleanly: a recording or `--audio-out` file is still
   written.
 
-[Unreleased]: https://github.com/dfdarty/freewili2-emu/compare/v2.2.1...HEAD
+[Unreleased]: https://github.com/dfdarty/freewili2-emu/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/dfdarty/freewili2-emu/compare/v2.2.1...v2.3.0
 [2.2.1]: https://github.com/dfdarty/freewili2-emu/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/dfdarty/freewili2-emu/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/dfdarty/freewili2-emu/compare/v2.0.0...v2.1.0
