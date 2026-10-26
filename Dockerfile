@@ -18,7 +18,7 @@ ARG EMSDK_VERSION=4.0.15
 FROM emscripten/emsdk:${EMSDK_VERSION} AS build
 ARG SDL_TAG=release-2.32.8
 ARG WILIBSP_REPO=https://github.com/freewili/wilibsp.git
-ARG WILIBSP_REF=be4bdd63d31a80f95410e583710cf4e43a7be7fa
+ARG WILIBSP_REF=9e040a54d7d17f6cf6f9f6f5949e974c55726c47
 ARG EXTRA_APPS=""
 
 # SDL2 source for Emscripten's SDL2 port (same version the port expects).
